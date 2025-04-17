@@ -2,6 +2,10 @@ import { tileSize, mapSize } from './modules/constants.js';
 import { createInitialGameState } from './modules/gameState.js';
 import { generateMap } from './modules/map.js';
 import { render, updateResourceDisplay, updateUpkeepDisplay, updateUnitButtons, updateResearchButtons, updateBuildingButtons, updateAgeProgressDisplay, showNotification, getUnitTooltipContent } from './modules/ui.js';
+import { terrainTypes } from './modules/terrain.js';
+import { buildingTypes } from './modules/buildings.js';
+import { unitTypes } from './modules/units.js';
+import { resourcesByAge } from './modules/resources.js';
 import { 
   endTurn, 
   startResearch, 
