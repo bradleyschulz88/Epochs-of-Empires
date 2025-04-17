@@ -1,549 +1,649 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row =>
-                    row.some(cell => cell !== '' && cell !== null && cell !== undefined)
-                );
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>World War Turn-Based Game</title>
+  <title>War Game</title>
   <style>
-    body { margin: 0; font-family: Arial; }
-    #gameCanvas { border: 1px solid black; }
-    #ui { position: absolute; top: 10px; left: 820px; width: 300px; }
-    button { margin: 5px; padding: 10px; width: 100%; }
-    select { margin: 5px; padding: 5px; width: 100%; }
-    .unit-buttons, .building-buttons, .research-buttons { max-height: 200px; overflow-y: auto; }
-    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; }
-    .unit-category { margin: 10px 0; }
-    .unit-category h4 { margin: 5px 0; }
+    body { margin: 0; font-family: Arial; background-color: #f0f0f0; color: #333; }
+    #gameContainer { display: flex; margin: 20px; gap: 20px; }
+    #canvasContainer { position: relative; }
+    #gameCanvas { border: 1px solid black; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
+    #minimap { position: absolute; top: 10px; right: 10px; border: 1px solid black; background: rgba(0,0,0,0.5); }
+    #ui { width: 350px; padding: 15px; background: #fff; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
+    button { margin: 5px; padding: 10px; width: 100%; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+    button:hover { background: #2d3748; }
+    button:disabled { background: #cbd5e0; cursor: not-allowed; }
+    select { margin: 5px; padding: 8px; width: 100%; border-radius: 4px; border: 1px solid #cbd5e0; }
+    .unit-buttons, .building-buttons, .research-buttons { max-height: 200px; overflow-y: auto; padding: 5px; }
+    #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 10px; }
+    .unit-category { margin: 10px 0; border-bottom: 1px solid #edf2f7; padding-bottom: 8px; }
+    .unit-category h4 { margin: 5px 0; color: #4a5568; }
+    #tooltip { position: absolute; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 4px; display: none; max-width: 300px; z-index: 100; }
+    #currentStats { margin-top: 10px; padding: 10px; border: 1px solid #edf2f7; border-radius: 4px; }
+    .tech-tree { margin-top: 10px; display: none; }
+    .tech-tree-toggle { text-align: center; cursor: pointer; margin: 5px; color: #4a5568; }
+    .tab-container { display: flex; }
+    .tab { padding: 10px 0; flex: 1; text-align: center; cursor: pointer; background: #edf2f7; }
+    .tab.active { background: #4a5568; color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .resource-container { display: flex; justify-content: space-between; background: #edf2f7; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+    .resource { display: flex; flex-direction: column; align-items: center; }
+    .resource-icon { font-size: 18px; margin-bottom: 5px; }
+    .notification { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 15px; border-radius: 5px; max-width: 300px; opacity: 0; transition: opacity 0.3s; z-index: 1000; }
+    .progress-container { width: 100%; background: #edf2f7; border-radius: 4px; margin: 10px 0; }
+    .progress-bar { height: 10px; border-radius: 4px; background: #4a5568; width: 0%; transition: width 0.3s; }
+    .progress-label { text-align: center; font-size: 12px; }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="800" height="800"></canvas>
-  <div id="loading">Loading...</div>
-  <div id="ui">
-    <h2>Player <span id="currentPlayer">1</span></h2>
-    <p>Age: <span id="currentAge">Stone Age</span></p>
-    <p>Resources: Gold <span id="gold">100</span> | Oil <span id="oil">50</span> | Manpower <span id="manpower">100</span></p>
-    <p>Weather: <span id="weather">Clear</span></p>
-    <p>Diplomacy: <span id="diplomacyStatus">Neutral</span></p>
-    <button onclick="endTurn()">End Turn</button>
-    <button onclick="researchTech()">Research Tech (50 Gold)</button>
-    <button onclick="advanceAge()">Advance Age</button>
-    <h3>Construct Building</h3>
-    <div class="building-buttons">
-      <button onclick="startBuilding('barracks')">Barracks (50 Gold, 10 Manpower)</button>
-      <button onclick="startBuilding('tank_yard')">Tank Yard (60 Gold, 20 Oil)</button>
-      <button onclick="startBuilding('ship_dock')">Ship Dock (70 Gold, 20 Oil)</button>
+  <div id="gameContainer">
+    <div id="canvasContainer">
+      <canvas id="gameCanvas" width="800" height="600"></canvas>
+      <canvas id="minimap" width="150" height="150"></canvas>
     </div>
-    <h3>Research Unit</h3>
-    <div class="research-buttons" id="researchButtons"></div>
-    <h3>Produce Unit</h3>
-    <div class="unit-buttons" id="unitButtons"></div>
-    <h3>Diplomacy</h3>
-    <select id="diplomacyAction" onchange="handleDiplomacy()">
-      <option value="">Select Action</option>
-      <option value="ally">Form Alliance</option>
-      <option value="trade">Trade Resources</option>
-      <option value="war">Declare War</option>
-    </select>
-    <h3>Game Settings</h3>
-    <select id="aiDifficulty" onchange="setAIDifficulty()">
-      <option value="easy">AI: Easy</option>
-      <option value="medium">AI: Medium</option>
-      <option value="hard">AI: Hard</option>
-    </select>
+    <div id="ui">
+      <h2>Player <span id="currentPlayer">1</span> - <span id="currentAge">Stone Age</span></h2>
+      
+      <div class="resource-container">
+        <div class="resource">
+          <div class="resource-icon">💰</div>
+          <div><span id="gold">100</span></div>
+          <div>Gold</div>
+        </div>
+        <div class="resource">
+          <div class="resource-icon">🛢️</div>
+          <div><span id="oil">50</span></div>
+          <div>Oil</div>
+        </div>
+        <div class="resource">
+          <div class="resource-icon">👥</div>
+          <div><span id="manpower">100</span></div>
+          <div>Manpower</div>
+        </div>
+      </div>
+      
+      <div id="currentStats">
+        <p>Weather: <span id="weather">Clear</span> | Diplomacy: <span id="diplomacyStatus">Neutral</span></p>
+        <p>Turn: <span id="turnCounter">1</span> | Year: <span id="yearCounter">3000 BCE</span></p>
+      </div>
+      
+      <div class="tab-container">
+        <div class="tab active" data-tab="actions">Actions</div>
+        <div class="tab" data-tab="research">Research</div>
+        <div class="tab" data-tab="units">Units</div>
+        <div class="tab" data-tab="diplomacy">Diplomacy</div>
+      </div>
+      
+      <div class="tab-content active" id="actions-tab">
+        <button onclick="endTurn()">End Turn</button>
+        <button onclick="advanceAge()" id="advanceAgeBtn">Advance Age</button>
+        <div class="progress-container">
+          <div class="progress-bar" id="ageProgressBar"></div>
+          <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
+        </div>
+        <h3>Construct Building</h3>
+        <div class="building-buttons">
+          <button onclick="startBuilding('barracks')">Barracks (50 Gold, 10 Manpower)</button>
+          <button onclick="startBuilding('tank_yard')">Tank Yard (60 Gold, 20 Oil)</button>
+          <button onclick="startBuilding('ship_dock')">Ship Dock (70 Gold, 20 Oil)</button>
+          <button onclick="startBuilding('research_center')">Research Center (80 Gold, 15 Manpower)</button>
+          <button onclick="startBuilding('market')">Market (40 Gold)</button>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="research-tab">
+        <h3>Research Technology</h3>
+        <div class="tech-tree-toggle" onclick="toggleTechTree()">Show/Hide Tech Tree</div>
+        <div class="tech-tree" id="techTree"></div>
+        <div class="research-buttons" id="researchButtons"></div>
+        <div class="progress-container">
+          <div class="progress-bar" id="researchProgressBar"></div>
+          <div class="progress-label" id="researchProgressLabel">Research Progress: 0%</div>
+        </div>
+      </div>
+      
+      <div class="tab-content" id="units-tab">
+        <h3>Produce Unit</h3>
+        <div class="unit-buttons" id="unitButtons"></div>
+      </div>
+      
+      <div class="tab-content" id="diplomacy-tab">
+        <h3>Diplomacy Actions</h3>
+        <select id="diplomacyAction" onchange="handleDiplomacy()">
+          <option value="">Select Action</option>
+          <option value="ally">Form Alliance</option>
+          <option value="trade">Trade Resources</option>
+          <option value="war">Declare War</option>
+          <option value="peace">Negotiate Peace</option>
+        </select>
+        
+        <h3>Game Settings</h3>
+        <select id="aiDifficulty" onchange="setAIDifficulty()">
+          <option value="easy">AI: Easy</option>
+          <option value="medium">AI: Medium</option>
+          <option value="hard">AI: Hard</option>
+        </select>
+        <button onclick="toggleFogOfWar()">Toggle Fog of War</button>
+      </div>
+    </div>
   </div>
+  
+  <div id="tooltip"></div>
+  <div id="loading">Loading Game...</div>
+  <div id="notification" class="notification"></div>
+  
   <script>
+    // Game constants
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const minimap = document.getElementById('minimap');
+    const minimapCtx = minimap.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+    
     const tileSize = 40;
-    const mapSize = 20;
-    const ages = ['Stone Age', 'Bronze Age', 'Iron Age', 'Medieval Age', 'Renaissance Age', 'Industrial Age', 'Imperial Age', 'Great War Age', 'Interwar Age', 'World War Age', 'Modern/Future Age'];
-
-    // Assets
-    const assets = {
-      units: {
-        forager: new Image(), clubman: new Image(), spearthrower: new Image(), mammoth_rider: new Image(), tamed_wolf: new Image(),
-        spearman: new Image(), chariot_archer: new Image(), slinger: new Image(), war_elephant: new Image(), trireme: new Image(), war_canoe: new Image(),
-        swordsman: new Image(), axeman: new Image(), horse_archer: new Image(), ballista_crew: new Image(), galley: new Image(), fire_galley: new Image(),
-        knight: new Image(), longbowman: new Image(), crossbowman: new Image(), siege_tower: new Image(), cog: new Image(), carrack: new Image(),
-        pikeman: new Image(), arquebusier: new Image(), musketman: new Image(), cannoneer: new Image(), galleon: new Image(), bomb_ketch: new Image(),
-        line_infantry: new Image(), grenadier: new Image(), horse_cavalry: new Image(), gatling_team: new Image(), steam_frigate: new Image(), ironclad_corvette: new Image(),
-        rifleman: new Image(), cavalry: new Image(), horse_artillery: new Image(), colonial_scout: new Image(), ironclad: new Image(), torpedo_boat: new Image(),
-        observation_balloon: new Image(), zeppelin_scout: new Image(), trench_infantry: new Image(), poison_gas_team: new Image(), early_tank: new Image(),
-        mobile_aa_gun: new Image(), dreadnought: new Image(), u_boat: new Image(), biplane_fighter: new Image(), zeppelin_bomber: new Image(),
-        armored_car: new Image(), motorized_infantry: new Image(), medium_tank: new Image(), anti_air_gun: new Image(), destroyer: new Image(),
-        aircraft_carrier: new Image(), submarine: new Image(), monoplane_fighter: new Image(), dive_bomber: new Image(),
-        heavy_tank: new Image(), paratrooper: new Image(), amphibious_tank: new Image(), rocket_artillery: new Image(), battleship: new Image(),
-        escort_destroyer: new Image(), submarine_ii: new Image(), strategic_bomber: new Image(), jet_fighter: new Image(),
-        main_battle_tank: new Image(), mechanized_infantry: new Image(), attack_helicopter: new Image(), cyber_unit: new Image(),
-        stealth_destroyer: new Image(), missile_cruiser: new Image(), drone_swarm: new Image(), stealth_bomber: new Image()
+    const mapSize = 30;
+    const minimapTileSize = minimap.width / mapSize;
+    const ages = ['Stone Age', 'Bronze Age', 'Iron Age', 'Medieval Age', 'Renaissance Age', 'Industrial Age', 'Modern Age'];
+    const historicalYears = ['3000 BCE', '2000 BCE', '1000 BCE', '500 CE', '1400 CE', '1800 CE', '1950 CE'];
+    
+    // Game settings
+    let fogOfWarEnabled = true;
+    let gameStarted = false;
+    let currentTab = 'actions';
+    let mouseX = 0, mouseY = 0;
+    let cameraOffsetX = 0, cameraOffsetY = 0;
+    let isDragging = false;
+    let dragStartX = 0, dragStartY = 0;
+    let selectedUnit = null;
+    let selectedBuildingType = null;
+    
+    // Define terrain types
+    const terrainTypes = {
+      land: { color: '#8BC34A', moveCost: 1, description: 'Basic land terrain' },
+      water: { color: '#2196F3', moveCost: 2, description: 'Water - only naval units can cross' },
+      mountain: { color: '#9E9E9E', moveCost: 3, description: 'Mountains - difficult to cross, defense bonus' },
+      forest: { color: '#33691E', moveCost: 2, description: 'Forest - provides cover and resources' },
+      desert: { color: '#FFC107', moveCost: 2, description: 'Desert - difficult to traverse' },
+      hills: { color: '#795548', moveCost: 2, description: 'Hills - provide defensive advantage' },
+      gold: { color: '#FFD700', moveCost: 1, description: 'Gold deposit - provides gold income' },
+      oil: { color: '#607D8B', moveCost: 1, description: 'Oil deposit - provides oil for advanced units' }
+    };
+    
+    // Technology tree
+    const technologies = {
+      'Stone Age': {
+        'Basic Tools': { 
+          cost: 30, 
+          prerequisites: [], 
+          unlocks: ['clubman', 'forager'],
+          description: 'First basic tools for hunting and gathering'
+        },
+        'Fire Making': { 
+          cost: 40, 
+          prerequisites: ['Basic Tools'], 
+          unlocks: ['camp'],
+          description: 'Control of fire allows cooking and better weapons' 
+        },
+        'Stone Weapons': { 
+          cost: 50, 
+          prerequisites: ['Basic Tools'], 
+          unlocks: ['spearthrower'],
+          description: 'Advanced stone weapons for hunting and combat'
+        }
       },
-      unitsLoaded: {},
-      sounds: {
-        explosion: new Audio(),
-        move: new Audio(),
-        soundsLoaded: { explosion: false, move: false }
+      'Bronze Age': {
+        'Bronze Working': { 
+          cost: 60, 
+          prerequisites: [], 
+          unlocks: ['spearman', 'slinger'],
+          description: 'First metal tools and weapons' 
+        },
+        'Wheel': { 
+          cost: 70, 
+          prerequisites: ['Bronze Working'], 
+          unlocks: ['chariot'],
+          description: 'Invention of the wheel enables faster movement' 
+        },
+        'Early Sailing': { 
+          cost: 80, 
+          prerequisites: ['Bronze Working'], 
+          unlocks: ['trireme'],
+          description: 'First sailing vessels for crossing water' 
+        }
+      },
+      'Iron Age': {
+        'Iron Working': { 
+          cost: 90, 
+          prerequisites: [], 
+          unlocks: ['swordsman', 'axeman'],
+          description: 'Stronger metal weapons and tools' 
+        },
+        'Cavalry': { 
+          cost: 100, 
+          prerequisites: ['Iron Working'], 
+          unlocks: ['horseman'],
+          description: 'Mounted warriors for faster attacks' 
+        },
+        'Engineering': { 
+          cost: 110, 
+          prerequisites: ['Iron Working'], 
+          unlocks: ['catapult'],
+          description: 'Early siege weapons and fortifications' 
+        }
       }
     };
-    const audioSupported = !!window.Audio && (new Audio().canPlayType('audio/mpeg') || new Audio().canPlayType('audio/ogg'));
-    if (audioSupported) {
-      assets.sounds.explosion.src = 'https://freesound.org/data/previews/66/66717_613805-lq.mp3';
-      assets.sounds.move.src = 'https://freesound.org/data/previews/171/171625_1351326-lq.mp3';
-      assets.sounds.explosion.fallbackSrc = 'https://freesound.org/data/previews/66/66717_613805-lq.ogg';
-      assets.sounds.move.fallbackSrc = 'https://freesound.org/data/previews/171/171625_1351326-lq.ogg';
-      Object.values(assets.sounds).forEach(sound => {
-        sound.oncanplaythrough = () => { assets.sounds.soundsLoaded[sound === assets.sounds.explosion ? 'explosion' : 'move'] = true; };
-        sound.onerror = () => { assets.sounds.soundsLoaded[sound === assets.sounds.explosion ? 'explosion' : 'move'] = false; };
-      });
-    }
-    Object.keys(assets.units).forEach(key => {
-      assets.units[key].src = '';
-      assets.unitsLoaded[key] = false;
-    });
-
+    
+    // Unit types
+    const unitTypes = {
+      // Stone Age
+      forager: { attack: 1, defense: 1, move: 2, vision: 3, cost: { gold: 10, manpower: 5 }, type: 'land' },
+      clubman: { attack: 3, defense: 2, move: 1, vision: 1, cost: { gold: 15, manpower: 10 }, type: 'land' },
+      spearthrower: { attack: 4, defense: 1, move: 1, vision: 2, cost: { gold: 20, manpower: 10 }, type: 'land' },
+      
+      // Bronze Age
+      spearman: { attack: 5, defense: 4, move: 1, vision: 1, cost: { gold: 20, manpower: 15 }, type: 'land' },
+      slinger: { attack: 4, defense: 2, move: 1, vision: 2, cost: { gold: 25, manpower: 10 }, type: 'land' },
+      chariot: { attack: 6, defense: 3, move: 3, vision: 2, cost: { gold: 30, manpower: 15 }, type: 'land' },
+      trireme: { attack: 5, defense: 3, move: 2, vision: 3, cost: { gold: 40, manpower: 20, oil: 5 }, type: 'sea' },
+      
+      // Iron Age
+      swordsman: { attack: 8, defense: 6, move: 1, vision: 1, cost: { gold: 30, manpower: 20 }, type: 'land' },
+      axeman: { attack: 10, defense: 4, move: 1, vision: 1, cost: { gold: 35, manpower: 20 }, type: 'land' },
+      horseman: { attack: 8, defense: 4, move: 3, vision: 2, cost: { gold: 40, manpower: 20 }, type: 'land' },
+      catapult: { attack: 12, defense: 2, move: 1, vision: 2, cost: { gold: 50, manpower: 25, oil: 10 }, type: 'land' }
+    };
+    
+    // Building types
+    const buildingTypes = {
+      hq: { defense: 10, vision: 3, production: { gold: 5, manpower: 5 }, cost: { gold: 0 } },
+      barracks: { defense: 5, vision: 1, production: { manpower: 10 }, cost: { gold: 50, manpower: 10 } },
+      market: { defense: 3, vision: 1, production: { gold: 15 }, cost: { gold: 40 } },
+      research_center: { defense: 4, vision: 2, production: { research: 5 }, cost: { gold: 80, manpower: 15 } },
+      tank_yard: { defense: 6, vision: 1, production: { oil: 5 }, cost: { gold: 60, oil: 20 } },
+      ship_dock: { defense: 5, vision: 2, production: {}, cost: { gold: 70, oil: 20 } }
+    };
+    
     // Game state
     let gameState = {
       currentPlayer: 1,
+      turn: 1,
       weather: 'Clear',
       players: [
-        { id: 1, resources: { gold: 100, oil: 50, manpower: 100 }, techLevel: 1, age: 'Stone Age', units: [], buildings: [], unlockedUnits: ['forager'], diplomacy: { status: 'Neutral', ally: false } },
-        { id: 2, resources: { gold: 100, oil: 50, manpower: 100 }, techLevel: 1, age: 'Stone Age', units: [], buildings: [], unlockedUnits: ['forager'], diplomacy: { status: 'Neutral', ally: false }, isAI: true }
+        {
+          id: 1,
+          name: "Player",
+          color: "#4299E1",
+          resources: { gold: 100, manpower: 100, oil: 50 },
+          units: [],
+          buildings: [],
+          technologies: [],
+          researchProgress: 0,
+          currentResearch: null,
+          age: "Stone Age",
+          ageProgress: 0,
+          unlockedUnits: ["forager"],
+          diplomacy: { status: "Neutral", ally: false }
+        },
+        {
+          id: 2,
+          name: "AI",
+          color: "#F56565",
+          resources: { gold: 100, manpower: 100, oil: 50 },
+          units: [],
+          buildings: [],
+          technologies: [],
+          researchProgress: 0,
+          currentResearch: null,
+          age: "Stone Age",
+          ageProgress: 0,
+          unlockedUnits: ["forager"],
+          diplomacy: { status: "Neutral", ally: false },
+          isAI: true
+        }
       ],
-      map: [],
-      selectedUnit: null,
-      selectedBuildingType: null,
-      aiDifficulty: 'easy',
-      randomEvent: null
+      map: []
     };
-
-    // Unit types with sprite prompts
-    const unitTypes = {
-      forager: { health: 25, attack: 5, move: 3, vision: 3, cost: { gold: 5, oil: 0, manpower: 0 }, type: 'land', age: 'Stone Age', building: 'hq', prompt: 'A photograph of a Forager, detailed forager in full gear, posed in a dense primeval forest at dawn with mist swirling around ancient trees. Taken on: Nikon D850, 35mm lens, f/4, 1/200 s.' },
-      clubman: { health: 35, attack: 10, move: 2, vision: 2, cost: { gold: 8, oil: 0, manpower: 0 }, type: 'land', age: 'Stone Age', building: 'hq', prompt: 'A photograph of a Clubman, detailed clubman in full gear, posed in a dense primeval forest at dawn with mist swirling around ancient trees. Taken on: Nikon D850, 35mm lens, f/4, 1/200 s.' },
-      spearthrower: { health: 30, attack: 8, move: 2, vision: 3, cost: { gold: 10, oil: 0, manpower: 5 }, type: 'land', age: 'Stone Age', building: 'hq', prompt: 'A photograph of a Spearthrower, detailed spearthrower in full gear, posed in a dense primeval forest at dawn with mist swirling around ancient trees. Taken on: Nikon D850, 35mm lens, f/4, 1/200 s.' },
-      mammoth_rider: { health: 80, attack: 25, move: 2, vision: 3, cost: { gold: 30, oil: 0, manpower: 5 }, type: 'land', age: 'Stone Age', building: 'hq', prompt: 'A photograph of a Mammoth Rider, detailed mammoth rider in full gear, posed in a dense primeval forest at dawn with mist swirling around ancient trees. Taken on: Nikon D850, 35mm lens, f/4, 1/200 s.' },
-      tamed_wolf: { health: 40, attack: 12, move: 4, vision: 5, cost: { gold: 15, oil: 0, manpower: 0 }, type: 'land', age: 'Stone Age', building: 'hq', prompt: 'A photograph of a Tamed Wolf, detailed tamed wolf in full gear, posed in a dense primeval forest at dawn with mist swirling around ancient trees. Taken on: Nikon D850, 35mm lens, f/4, 1/200 s.' },
-      spearman: { health: 40, attack: 15, move: 2, vision: 3, cost: { gold: 10, oil: 0, manpower: 5 }, type: 'land', age: 'Bronze Age', building: 'barracks', prompt: 'A photograph of a Spearman, detailed spearman in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      chariot_archer: { health: 45, attack: 12, move: 4, vision: 4, cost: { gold: 15, oil: 0, manpower: 8 }, type: 'land', age: 'Bronze Age', building: 'tank_yard', prompt: 'A photograph of a Chariot Archer, detailed chariot archer in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      slinger: { health: 30, attack: 8, move: 3, vision: 4, cost: { gold: 8, oil: 0, manpower: 5 }, type: 'land', age: 'Bronze Age', building: 'barracks', prompt: 'A photograph of a Slinger, detailed slinger in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      war_elephant: { health: 100, attack: 30, move: 2, vision: 3, cost: { gold: 40, oil: 0, manpower: 10 }, type: 'land', age: 'Bronze Age', building: 'tank_yard', prompt: 'A photograph of a War Elephant, detailed war elephant in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      trireme: { health: 70, attack: 20, move: 3, vision: 5, cost: { gold: 25, oil: 0, manpower: 10 }, type: 'sea', age: 'Bronze Age', building: 'ship_dock', prompt: 'A photograph of a Trireme, detailed trireme in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      war_canoe: { health: 50, attack: 15, move: 4, vision: 4, cost: { gold: 15, oil: 0, manpower: 8 }, type: 'sea', age: 'Bronze Age', building: 'ship_dock', prompt: 'A photograph of a War Canoe, detailed war canoe in full gear, posed in a sun-bleached plain with early earthen settlements and flickering bonfires. Taken on: Nikon D850, 35mm lens, f/3.5, 1/250 s.' },
-      swordsman: { health: 50, attack: 20, move: 2, vision: 3, cost: { gold: 15, oil: 0, manpower: 10 }, type: 'land', age: 'Iron Age', building: 'barracks', prompt: 'A photograph of a Swordsman, detailed swordsman in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      axeman: { health: 60, attack: 25, move: 2, vision: 2, cost: { gold: 20, oil: 0, manpower: 12 }, type: 'land', age: 'Iron Age', building: 'barracks', prompt: 'A photograph of an Axeman, detailed axeman in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      horse_archer: { health: 40, attack: 18, move: 4, vision: 4, cost: { gold: 20, oil: 0, manpower: 10 }, type: 'land', age: 'Iron Age', building: 'tank_yard', prompt: 'A photograph of a Horse Archer, detailed horse archer in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      ballista_crew: { health: 30, attack: 30, move: 1, vision: 3, cost: { gold: 25, oil: 0, manpower: 8 }, type: 'land', age: 'Iron Age', building: 'tank_yard', prompt: 'A photograph of a Ballista Crew, detailed ballista crew in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      galley: { health: 90, attack: 25, move: 3, vision: 5, cost: { gold: 35, oil: 0, manpower: 15 }, type: 'sea', age: 'Iron Age', building: 'ship_dock', prompt: 'A photograph of a Galley, detailed galley in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      fire_galley: { health: 80, attack: 30, move: 3, vision: 5, cost: { gold: 40, oil: 0, manpower: 15 }, type: 'sea', age: 'Iron Age', building: 'ship_dock', prompt: 'A photograph of a Fire Galley, detailed fire galley in full gear, posed in rolling hills dotted with stone forts under a cloudy sky. Taken on: Nikon D850, 50mm lens, f/4, 1/250 s.' },
-      knight: { health: 80, attack: 30, move: 3, vision: 3, cost: { gold: 25, oil: 0, manpower: 15 }, type: 'land', age: 'Medieval Age', building: 'tank_yard', prompt: 'A photograph of a Knight, detailed knight in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      longbowman: { health: 45, attack: 20, move: 2, vision: 4, cost: { gold: 20, oil: 0, manpower: 10 }, type: 'land', age: 'Medieval Age', building: 'barracks', prompt: 'A photograph of a Longbowman, detailed longbowman in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      crossbowman: { health: 50, attack: 25, move: 2, vision: 3, cost: { gold: 25, oil: 0, manpower: 12 }, type: 'land', age: 'Medieval Age', building: 'barracks', prompt: 'A photograph of a Crossbowman, detailed crossbowman in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      siege_tower: { health: 100, attack: 10, move: 1, vision: 2, cost: { gold: 40, oil: 0, manpower: 20 }, type: 'land', age: 'Medieval Age', building: 'tank_yard', prompt: 'A photograph of a Siege Tower, detailed siege tower in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      cog: { health: 70, attack: 15, move: 2, vision: 4, cost: { gold: 30, oil: 0, manpower: 12 }, type: 'sea', age: 'Medieval Age', building: 'ship_dock', prompt: 'A photograph of a Cog, detailed cog in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      carrack: { health: 120, attack: 30, move: 3, vision: 5, cost: { gold: 60, oil: 0, manpower: 20 }, type: 'sea', age: 'Medieval Age', building: 'ship_dock', prompt: 'A photograph of a Carrack, detailed carrack in full gear, posed in a walled castle courtyard with banners flapping in the breeze. Taken on: Nikon D850, 85mm lens, f/4, 1/320 s.' },
-      pikeman: { health: 60, attack: 25, move: 2, vision: 3, cost: { gold: 25, oil: 0, manpower: 12 }, type: 'land', age: 'Renaissance Age', building: 'barracks', prompt: 'A photograph of a Pikeman, detailed pikeman in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      arquebusier: { health: 55, attack: 28, move: 2, vision: 4, cost: { gold: 30, oil: 0, manpower: 15 }, type: 'land', age: 'Renaissance Age', building: 'barracks', prompt: 'A photograph of an Arquebusier, detailed arquebusier in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      musketman: { health: 55, attack: 30, move: 2, vision: 4, cost: { gold: 30, oil: 0, manpower: 15 }, type: 'land', age: 'Renaissance Age', building: 'barracks', prompt: 'A photograph of a Musketman, detailed musketman in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      cannoneer: { health: 50, attack: 35, move: 1, vision: 2, cost: { gold: 40, oil: 0, manpower: 20 }, type: 'land', age: 'Renaissance Age', building: 'tank_yard', prompt: 'A photograph of a Cannoneer, detailed cannoneer in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      galleon: { health: 140, attack: 40, move: 3, vision: 5, cost: { gold: 80, oil: 0, manpower: 25 }, type: 'sea', age: 'Renaissance Age', building: 'ship_dock', prompt: 'A photograph of a Galleon, detailed galleon in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      bomb_ketch: { health: 100, attack: 30, move: 2, vision: 3, cost: { gold: 60, oil: 0, manpower: 18 }, type: 'sea', age: 'Renaissance Age', building: 'ship_dock', prompt: 'A photograph of a Bomb Ketch, detailed bomb ketch in full gear, posed in a bustling port town with tall sailing ships and cobblestone streets. Taken on: Nikon D850, 85mm lens, f/5.6, 1/400 s.' },
-      line_infantry: { health: 70, attack: 35, move: 2, vision: 4, cost: { gold: 40, oil: 0, manpower: 20 }, type: 'land', age: 'Industrial Age', building: 'barracks', prompt: 'A photograph of a Line Infantry, detailed line infantry in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      grenadier: { health: 75, attack: 40, move: 2, vision: 3, cost: { gold: 50, oil: 0, manpower: 25 }, type: 'land', age: 'Industrial Age', building: 'barracks', prompt: 'A photograph of a Grenadier, detailed grenadier in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      horse_cavalry: { health: 90, attack: 40, move: 4, vision: 4, cost: { gold: 50, oil: 0, manpower: 25 }, type: 'land', age: 'Industrial Age', building: 'tank_yard', prompt: 'A photograph of a Horse Cavalry, detailed horse cavalry in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      gatling_team: { health: 50, attack: 25, move: 1, vision: 4, cost: { gold: 60, oil: 0, manpower: 15 }, type: 'land', age: 'Industrial Age', building: 'barracks', prompt: 'A photograph of a Gatling Team, detailed gatling team in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      steam_frigate: { health: 120, attack: 45, move: 3, vision: 5, cost: { gold: 80, oil: 30, manpower: 30 }, type: 'sea', age: 'Industrial Age', building: 'ship_dock', prompt: 'A photograph of a Steam Frigate, detailed steam frigate in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      ironclad_corvette: { health: 110, attack: 50, move: 3, vision: 4, cost: { gold: 90, oil: 25, manpower: 25 }, type: 'sea', age: 'Industrial Age', building: 'ship_dock', prompt: 'A photograph of an Ironclad Corvette, detailed ironclad corvette in full gear, posed in a smoky battlefield with steam engines and factory silhouettes. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      rifleman: { health: 40, attack: 15, move: 2, vision: 3, cost: { gold: 15, oil: 0, manpower: 10 }, type: 'land', age: 'Imperial Age', building: 'barracks', prompt: 'A photograph of a Rifleman, detailed rifleman in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      cavalry: { health: 50, attack: 20, move: 4, vision: 3, cost: { gold: 25, oil: 0, manpower: 15 }, type: 'land', age: 'Imperial Age', building: 'tank_yard', prompt: 'A photograph of a Cavalry, detailed cavalry in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      horse_artillery: { health: 70, attack: 30, move: 2, vision: 4, cost: { gold: 35, oil: 0, manpower: 20 }, type: 'land', age: 'Imperial Age', building: 'tank_yard', prompt: 'A photograph of a Horse Artillery, detailed horse artillery in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      colonial_scout: { health: 30, attack: 10, move: 5, vision: 5, cost: { gold: 20, oil: 0, manpower: 5 }, type: 'land', age: 'Imperial Age', building: 'barracks', prompt: 'A photograph of a Colonial Scout, detailed colonial scout in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      ironclad: { health: 100, attack: 30, move: 2, vision: 4, cost: { gold: 50, oil: 20, manpower: 20 }, type: 'sea', age: 'Imperial Age', building: 'ship_dock', prompt: 'A photograph of an Ironclad, detailed ironclad in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      torpedo_boat: { health: 60, attack: 25, move: 5, vision: 4, cost: { gold: 30, oil: 15, manpower: 10 }, type: 'sea', age: 'Imperial Age', building: 'ship_dock', prompt: 'A photograph of a Torpedo Boat, detailed torpedo boat in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      observation_balloon: { health: 20, attack: 0, move: 2, vision: 6, cost: { gold: 20, oil: 5, manpower: 5 }, type: 'air', age: 'Imperial Age', building: 'hq', prompt: 'A photograph of an Observation Balloon, detailed observation balloon in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      zeppelin_scout: { health: 50, attack: 10, move: 3, vision: 6, cost: { gold: 40, oil: 20, manpower: 15 }, type: 'air', age: 'Imperial Age', building: 'hq', prompt: 'A photograph of a Zeppelin Scout, detailed zeppelin scout in full gear, posed in a colonial outpost with red-earth roads and steamy rivers. Taken on: Nikon D850, 50mm lens, f/2.8, 1/500 s.' },
-      trench_infantry: { health: 50, attack: 20, move: 1, vision: 3, cost: { gold: 20, oil: 10, manpower: 10 }, type: 'land', age: 'Great War Age', building: 'barracks', prompt: 'A photograph of a Trench Infantry, detailed trench infantry in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      poison_gas_team: { health: 30, attack: 15, move: 1, vision: 4, cost: { gold: 25, oil: 10, manpower: 5 }, type: 'land', age: 'Great War Age', building: 'barracks', prompt: 'A photograph of a Poison Gas Team, detailed poison gas team in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      early_tank: { health: 80, attack: 30, move: 2, vision: 4, cost: { gold: 40, oil: 15, manpower: 10 }, type: 'land', age: 'Great War Age', building: 'tank_yard', prompt: 'A photograph of an Early Tank, detailed early tank in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      mobile_aa_gun: { health: 40, attack: 10, move: 2, vision: 4, cost: { gold: 30, oil: 10, manpower: 10 }, type: 'land', age: 'Great War Age', building: 'tank_yard', prompt: 'A photograph of a Mobile AA Gun, detailed mobile aa gun in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      dreadnought: { health: 120, attack: 40, move: 3, vision: 5, cost: { gold: 60, oil: 25, manpower: 20 }, type: 'sea', age: 'Great War Age', building: 'ship_dock', prompt: 'A photograph of a Dreadnought, detailed dreadnought in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      u_boat: { health: 80, attack: 35, move: 3, vision: 4, cost: { gold: 50, oil: 20, manpower: 15 }, type: 'sea', age: 'Great War Age', building: 'ship_dock', prompt: 'A photograph of a U-Boat, detailed u-boat in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      biplane_fighter: { health: 30, attack: 15, move: 5, vision: 6, cost: { gold: 50, oil: 20, manpower: 10 }, type: 'air', age: 'Great War Age', building: 'hq', prompt: 'A photograph of a Biplane Fighter, detailed biplane fighter in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      zeppelin_bomber: { health: 80, attack: 25, move: 4, vision: 6, cost: { gold: 70, oil: 30, manpower: 20 }, type: 'air', age: 'Great War Age', building: 'hq', prompt: 'A photograph of a Zeppelin Bomber, detailed zeppelin bomber in full gear, posed in a muddy trench network under an overcast sky. Taken on: Nikon D850, 85mm lens, f/5.6, 1/800 s.' },
-      armored_car: { health: 60, attack: 25, move: 4, vision: 4, cost: { gold: 30, oil: 10, manpower: 10 }, type: 'land', age: 'Interwar Age', building: 'tank_yard', prompt: 'A photograph of an Armored Car, detailed armored car in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      motorized_infantry: { health: 60, attack: 20, move: 3, vision: 3, cost: { gold: 35, oil: 10, manpower: 15 }, type: 'land', age: 'Interwar Age', building: 'barracks', prompt: 'A photograph of a Motorized Infantry, detailed motorized infantry in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      medium_tank: { health: 90, attack: 35, move: 3, vision: 4, cost: { gold: 50, oil: 20, manpower: 10 }, type: 'land', age: 'Interwar Age', building: 'tank_yard', prompt: 'A photograph of a Medium Tank, detailed medium tank in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      anti_air_gun: { health: 50, attack: 5, move: 1, vision: 5, cost: { gold: 40, oil: 15, manpower: 10 }, type: 'land', age: 'Interwar Age', building: 'tank_yard', prompt: 'A photograph of an Anti-Air Gun, detailed anti-air gun in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      destroyer: { health: 80, attack: 30, move: 4, vision: 5, cost: { gold: 60, oil: 25, manpower: 20 }, type: 'sea', age: 'Interwar Age', building: 'ship_dock', prompt: 'A photograph of a Destroyer, detailed destroyer in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      aircraft_carrier: { health: 100, attack: 20, move: 3, vision: 5, cost: { gold: 70, oil: 30, manpower: 25 }, type: 'sea', age: 'Interwar Age', building: 'ship_dock', prompt: 'A photograph of an Aircraft Carrier, detailed aircraft carrier in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      submarine: { health: 80, attack: 40, move: 3, vision: 4, cost: { gold: 50, oil: 20, manpower: 15 }, type: 'sea', age: 'Interwar Age', building: 'ship_dock', prompt: 'A photograph of a Submarine, detailed submarine in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      monoplane_fighter: { health: 50, attack: 25, move: 6, vision: 6, cost: { gold: 60, oil: 25, manpower: 10 }, type: 'air', age: 'Interwar Age', building: 'hq', prompt: 'A photograph of a Monoplane Fighter, detailed monoplane fighter in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      dive_bomber: { health: 60, attack: 30, move: 4, vision: 5, cost: { gold: 65, oil: 30, manpower: 15 }, type: 'air', age: 'Interwar Age', building: 'hq', prompt: 'A photograph of a Dive Bomber, detailed dive bomber in full gear, posed in an airstrip beside a modernizing city skyline. Taken on: Nikon D850, 100mm lens, f/4, 1/800 s.' },
-      heavy_tank: { health: 120, attack: 50, move: 2, vision: 4, cost: { gold: 60, oil: 25, manpower: 15 }, type: 'land', age: 'World War Age', building: 'tank_yard', prompt: 'A photograph of a Heavy Tank, detailed heavy tank in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      paratrooper: { health: 60, attack: 30, move: 3, vision: 3, cost: { gold: 30, oil: 10, manpower: 15 }, type: 'land', age: 'World War Age', building: 'barracks', prompt: 'A photograph of a Paratrooper, detailed paratrooper in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      amphibious_tank: { health: 100, attack: 40, move: 3, vision: 4, cost: { gold: 60, oil: 20, manpower: 15 }, type: 'land', age: 'World War Age', building: 'tank_yard', prompt: 'A photograph of an Amphibious Tank, detailed amphibious tank in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      rocket_artillery: { health: 80, attack: 45, move: 1, vision: 3, cost: { gold: 70, oil: 30, manpower: 20 }, type: 'land', age: 'World War Age', building: 'tank_yard', prompt: 'A photograph of a Rocket Artillery, detailed rocket artillery in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      battleship: { health: 150, attack: 60, move: 3, vision: 5, cost: { gold: 80, oil: 40, manpower: 20 }, type: 'sea', age: 'World War Age', building: 'ship_dock', prompt: 'A photograph of a Battleship, detailed battleship in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      escort_destroyer: { health: 70, attack: 25, move: 4, vision: 5, cost: { gold: 50, oil: 20, manpower: 15 }, type: 'sea', age: 'World War Age', building: 'ship_dock', prompt: 'A photograph of an Escort Destroyer, detailed escort destroyer in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      submarine_ii: { health: 90, attack: 45, move: 3, vision: 4, cost: { gold: 60, oil: 25, manpower: 15 }, type: 'sea', age: 'World War Age', building: 'ship_dock', prompt: 'A photograph of a Submarine II, detailed submarine ii in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      strategic_bomber: { health: 70, attack: 50, move: 5, vision: 6, cost: { gold: 80, oil: 35, manpower: 15 }, type: 'air', age: 'World War Age', building: 'hq', prompt: 'A photograph of a Strategic Bomber, detailed strategic bomber in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      jet_fighter: { health: 60, attack: 35, move: 7, vision: 6, cost: { gold: 70, oil: 30, manpower: 10 }, type: 'air', age: 'World War Age', building: 'hq', prompt: 'A photograph of a Jet Fighter, detailed jet fighter in full gear, posed in a war-torn urban rubble landscape at dusk. Taken on: Nikon D850, 200mm lens, f/5.6, 1/1000 s.' },
-      main_battle_tank: { health: 140, attack: 60, move: 3, vision: 4, cost: { gold: 70, oil: 30, manpower: 15 }, type: 'land', age: 'Modern/Future Age', building: 'tank_yard', prompt: 'A photograph of a Main Battle Tank, detailed main battle tank in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      mechanized_infantry: { health: 80, attack: 30, move: 3, vision: 4, cost: { gold: 60, oil: 20, manpower: 20 }, type: 'land', age: 'Modern/Future Age', building: 'barracks', prompt: 'A photograph of a Mechanized Infantry, detailed mechanized infantry in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      attack_helicopter: { health: 90, attack: 50, move: 5, vision: 5, cost: { gold: 80, oil: 40, manpower: 20 }, type: 'air', age: 'Modern/Future Age', building: 'hq', prompt: 'A photograph of an Attack Helicopter, detailed attack helicopter in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      cyber_unit: { health: 40, attack: 10, move: 2, vision: 3, cost: { gold: 50, oil: 20, manpower: 10 }, type: 'land', age: 'Modern/Future Age', building: 'barracks', prompt: 'A photograph of a Cyber Unit, detailed cyber unit in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      stealth_destroyer: { health: 100, attack: 50, move: 4, vision: 5, cost: { gold: 90, oil: 40, manpower: 20 }, type: 'sea', age: 'Modern/Future Age', building: 'ship_dock', prompt: 'A photograph of a Stealth Destroyer, detailed stealth destroyer in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      missile_cruiser: { health: 120, attack: 60, move: 3, vision: 5, cost: { gold: 100, oil: 50, manpower: 25 }, type: 'sea', age: 'Modern/Future Age', building: 'ship_dock', prompt: 'A photograph of a Missile Cruiser, detailed missile cruiser in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      drone_swarm: { health: 50, attack: 40, move: 6, vision: 6, cost: { gold: 70, oil: 30, manpower: 10 }, type: 'air', age: 'Modern/Future Age', building: 'hq', prompt: 'A photograph of a Drone Swarm, detailed drone swarm in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' },
-      stealth_bomber: { health: 60, attack: 55, move: 6, vision: 6, cost: { gold: 85, oil: 40, manpower: 15 }, type: 'air', age: 'Modern/Future Age', building: 'hq', prompt: 'A photograph of a Stealth Bomber, detailed stealth bomber in full gear, posed in a futuristic battlefield with ruined skyscrapers bathed in sunset light. Taken on: Nikon D850, 100mm lens, f/2.8, 1/800 s.' }
+    
+    // Init function to be called when page loads
+    window.onload = function() {
+      init();
     };
-
-    // Building types
-    const buildingTypes = {
-      hq: { health: 200, vision: 3, cost: { gold: 0, oil: 0, manpower: 0 }, terrain: 'land' },
-      barracks: { health: 100, vision: 2, cost: { gold: 50, oil: 0, manpower: 10 }, terrain: 'land' },
-      tank_yard: { health: 100, vision: 2, cost: { gold: 60, oil: 20, manpower: 0 }, terrain: 'land' },
-      ship_dock: { health: 100, vision: 2, cost: { gold: 70, oil: 20, manpower: 0 }, terrain: 'water' }
-    };
-
-    // Fallback colors for units
-    const unitColors = {
-      forager: '#FFA500', clubman: '#8B0000', spearthrower: '#A0522D', mammoth_rider: '#4A2F2F', tamed_wolf: '#808080',
-      spearman: '#228B22', chariot_archer: '#FFD700', slinger: '#6B8E23', war_elephant: '#2F4F4F', trireme: '#4682B4', war_canoe: '#5F9EA0',
-      swordsman: '#B22222', axeman: '#8B4513', horse_archer: '#DAA520', ballista_crew: '#696969', galley: '#4169E1', fire_galley: '#FF4500',
-      knight: '#C0C0C0', longbowman: '#228B22', crossbowman: '#9ACD32', siege_tower: '#8B4513', cog: '#DEB887', carrack: '#4682B4',
-      pikeman: '#6A5ACD', arquebusier: '#FF6347', musketman: '#DC143C', cannoneer: '#2F4F4F', galleon: '#5F9EA0', bomb_ketch: '#FF4500',
-      line_infantry: '#B22222', grenadier: '#228B22', horse_cavalry: '#FFD700', gatling_team: '#696969', steam_frigate: '#4682B4', ironclad_corvette: '#2F4F4F',
-      rifleman: '#8B0000', cavalry: '#228B22', horse_artillery: '#DAA520', colonial_scout: '#6B8E23', ironclad: '#4682B4', torpedo_boat: '#5F9EA0',
-      observation_balloon: '#FFD700', zeppelin_scout: '#C0C0C0', trench_infantry: '#6B8E23', poison_gas_team: '#9ACD32', early_tank: '#808080',
-      mobile_aa_gun: '#696969', dreadnought: '#2F4F4F', u_boat: '#483D8B', biplane_fighter: '#FFD700', zeppelin_bomber: '#A9A9A9',
-      armored_car: '#DAA520', motorized_infantry: '#B22222', medium_tank: '#696969', anti_air_gun: '#2E8B57', destroyer: '#4169E1',
-      aircraft_carrier: '#5F9EA0', submarine: '#483D8B', monoplane_fighter: '#00CED1', dive_bomber: '#FF4500',
-      heavy_tank: '#2E8B57', paratrooper: '#9ACD32', amphibious_tank: '#808080', rocket_artillery: '#FF4500', battleship: '#708090',
-      escort_destroyer: '#4169E1', submarine_ii: '#483D8B', strategic_bomber: '#FF4500', jet_fighter: '#00CED1',
-      main_battle_tank: '#556B2F', mechanized_infantry: '#B22222', attack_helicopter: '#FF4500', cyber_unit: '#800080',
-      stealth_destroyer: '#191970', missile_cruiser: '#4169E1', drone_swarm: '#00FF7F', stealth_bomber: '#2F4F4F'
-    };
-
-    // Fallback colors for buildings
-    const buildingColors = {
-      hq: '#A9A9A9',
-      barracks: '#DEB887',
-      tank_yard: '#8B4513',
-      ship_dock: '#4169E1'
-    };
-
-    // Terrain and resource effects
-    const terrainEffects = {
-      land: { moveCost: 1, defense: 1, color: '#00FF00' }, // Green grass
-      water: { moveCost: 1, defense: 1, color: '#0000FF' }, // Blue sea
-      mountain: { moveCost: 2, defense: 1.5, color: '#808080' }, // Gray mountain
-      gold: { moveCost: 1, defense: 1, color: '#FFFF00', bonus: { gold: 10 } }, // Yellow gold
-      oil: { moveCost: 1, defense: 1, color: '#000000', bonus: { oil: 5 } }, // Black oil
-      wood: { moveCost: 1, defense: 1, color: '#8B4513', bonus: { gold: 5 } }, // Brown wood
-      food: { moveCost: 1, defense: 1, color: '#FF0000', bonus: { manpower: 5 } } // Red food
-    };
-
-    // Fog of war colors by age
-    const fogColors = {
-      'Stone Age': '#D3D3D3', // Misty forest
-      'Bronze Age': '#E0C097', // Sun-bleached plain
-      'Iron Age': '#A9A9A9', // Cloudy hills
-      'Medieval Age': '#B0C4DE', // Castle breeze
-      'Renaissance Age': '#CDB79E', // Port town
-      'Industrial Age': '#696969', // Smoky battlefield
-      'Imperial Age': '#8B4513', // Red-earth outpost
-      'Great War Age': '#555555', // Muddy trenches
-      'Interwar Age': '#778899', // City skyline
-      'World War Age': '#483C32', // Urban rubble at dusk
-      'Modern/Future Age': '#FF4500' // Sunset-lit skyscrapers
-    };
-
-    // Weather effects
-    const weatherEffects = {
-      Clear: { moveModifier: 1, attackModifier: 1 },
-      Rain: { moveModifier: 0.7, attackModifier: 0.8 }
-    };
-
-    // Age progression requirements
-    const ageRequirements = {
-      'Bronze Age': { gold: 50, manpower: 50, buildings: 0, researchedUnits: 1 },
-      'Iron Age': { gold: 100, manpower: 50, buildings: 1, researchedUnits: 2 },
-      'Medieval Age': { gold: 150, manpower: 75, buildings: 2, researchedUnits: 3 },
-      'Renaissance Age': { gold: 200, manpower: 100, buildings: 3, researchedUnits: 4 },
-      'Industrial Age': { gold: 250, oil: 50, manpower: 125, buildings: 3, researchedUnits: 5 },
-      'Imperial Age': { gold: 300, oil: 100, manpower: 150, buildings: 4, researchedUnits: 6 },
-      'Great War Age': { gold: 350, oil: 150, manpower: 175, buildings: 4, researchedUnits: 7 },
-      'Interwar Age': { gold: 400, oil: 200, manpower: 200, buildings: 5, researchedUnits: 8 },
-      'World War Age': { gold: 450, oil: 250, manpower: 225, buildings: 5, researchedUnits: 9 },
-      'Modern/Future Age': { gold: 500, oil: 300, manpower: 250, buildings: 6, researchedUnits: 10 }
-    };
-
-    // Initialize map
-    function initMap() {
-      try {
-        console.log('Initializing map...');
-        for (let y = 0; y < mapSize; y++) {
-          gameState.map[y] = [];
-          for (let x = 0; x < mapSize; x++) {
-            const rand = Math.random();
-            gameState.map[y][x] = rand < 0.3 ? 1 : rand < 0.5 ? 2 : 0;
+    
+    function init() {
+      generateMap();
+      setupEventListeners();
+      updateResourceDisplay();
+      updateUnitButtons();
+      updateResearchButtons();
+      render();
+      
+      document.getElementById('loading').style.display = 'none';
+      gameStarted = true;
+    }
+    
+    // Generate a procedural map with varied terrain
+    function generateMap() {
+      gameState.map = [];
+      
+      // Generate base terrain
+      for (let y = 0; y < mapSize; y++) {
+        const row = [];
+        for (let x = 0; x < mapSize; x++) {
+          // Create more varied terrain with better generation
+          let terrainType = 'land';
+          
+          // Add water bodies
+          const centerDist = Math.sqrt(Math.pow(x - mapSize/2, 2) + Math.pow(y - mapSize/2, 2));
+          if (Math.random() < 0.25 || (centerDist > mapSize/2.5 && Math.random() < 0.6)) {
+            terrainType = 'water';
+          }
+          
+          // Add other terrain types
+          if (terrainType === 'land') {
+            const r = Math.random();
+            if (r < 0.1) {
+              terrainType = 'mountain';
+            } else if (r < 0.25) {
+              terrainType = 'hills';
+            } else if (r < 0.45) {
+              terrainType = 'forest';
+            } else if (r < 0.5) {
+              terrainType = 'desert';
+            }
+          }
+          
+          // Add resources
+          if (terrainType === 'desert' && Math.random() < 0.2) {
+            terrainType = 'oil';
+          } else if ((terrainType === 'mountain' || terrainType === 'hills') && Math.random() < 0.15) {
+            terrainType = 'gold';
+          }
+          
+          row.push({ 
+            type: terrainType, 
+            x: x, 
+            y: y, 
+            unit: null, 
+            building: null,
+            discovered: [false, false]
+          });
+        }
+        gameState.map.push(row);
+      }
+      
+      // Place starting HQs for both players
+      const player1X = 3;
+      const player1Y = 3;
+      const player2X = mapSize - 4;
+      const player2Y = mapSize - 4;
+      
+      // Ensure starting locations are land
+      for (let y = player1Y - 1; y <= player1Y + 1; y++) {
+        for (let x = player1X - 1; x <= player1X + 1; x++) {
+          if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
+            gameState.map[y][x].type = 'land';
           }
         }
-        gameState.map[2][2] = 0; // Player 1 HQ
-        gameState.map[17][17] = 0; // Player 2 HQ
-        gameState.map[3][3] = 0; // Player 1 unit
-        gameState.map[16][16] = 0; // Player 2 unit
-        const resources = [
-          { type: 3, count: 3, terrain: [0, 2] }, // Gold
-          { type: 4, count: 3, terrain: [1] }, // Oil
-          { type: 5, count: 3, terrain: [0, 2] }, // Wood
-          { type: 6, count: 3, terrain: [0, 2] } // Food
-        ];
-        resources.forEach(resource => {
-          let placed = 0;
-          let attempts = 0;
-          while (placed < resource.count && attempts < 100) {
-            const x = Math.floor(Math.random() * mapSize);
-            const y = Math.floor(Math.random() * mapSize);
-            if (resource.terrain.includes(gameState.map[y][x]) &&
-                !gameState.players.some(p => p.buildings.some(b => b.x === x && b.y === y) || p.units.some(u => u.x === x && u.y === y))) {
-              gameState.map[y][x] = resource.type;
-              placed++;
-            }
-            attempts++;
+      }
+      
+      for (let y = player2Y - 1; y <= player2Y + 1; y++) {
+        for (let x = player2X - 1; x <= player2X + 1; x++) {
+          if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
+            gameState.map[y][x].type = 'land';
           }
-        });
-        gameState.players.forEach(player => {
-          const isPlayer1 = player.id === 1;
-          player.buildings.push({
-            type: 'hq',
-            x: isPlayer1 ? 2 : 17,
-            y: isPlayer1 ? 2 : 17,
-            health: buildingTypes.hq.health
-          });
-          player.units.push({
-            type: 'forager',
-            x: isPlayer1 ? 3 : 16,
-            y: isPlayer1 ? 3 : 16,
-            health: unitTypes.forager.health,
-            attack: unitTypes.forager.attack,
-            moves: unitTypes.forager.move,
-            vision: unitTypes.forager.vision,
-            xp: 0
-          });
-        });
-        console.log('Map initialized successfully.');
-      } catch (e) {
-        console.error('Error initializing map:', e);
+        }
+      }
+      
+      // Place HQs
+      gameState.map[player1Y][player1X].building = { type: 'hq', owner: 1 };
+      gameState.map[player2Y][player2X].building = { type: 'hq', owner: 2 };
+      
+      // Add buildings to player lists
+      gameState.players[0].buildings.push({ type: 'hq', x: player1X, y: player1Y });
+      gameState.players[1].buildings.push({ type: 'hq', x: player2X, y: player2Y });
+      
+      // Reveal areas around HQs
+      revealArea(player1X, player1Y, 4, 0);
+      revealArea(player2X, player2Y, 4, 1);
+    }
+    
+    // Reveal area around a point
+    function revealArea(centerX, centerY, radius, playerIndex) {
+      for (let y = centerY - radius; y <= centerY + radius; y++) {
+        for (let x = centerX - radius; x <= centerX + radius; x++) {
+          if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
+            const dist = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+            if (dist <= radius) {
+              gameState.map[y][x].discovered[playerIndex] = true;
+            }
+          }
+        }
       }
     }
-
-    // Update UI buttons for research and production
-    function updateUnitButtons() {
-      const player = gameState.players[gameState.currentPlayer - 1];
-      const researchContainer = document.getElementById('researchButtons');
-      const unitContainer = document.getElementById('unitButtons');
-      researchContainer.innerHTML = '';
-      unitContainer.innerHTML = '';
-
-      const landUnits = [], navalUnits = [], airUnits = [];
-      Object.entries(unitTypes).forEach(([type, data]) => {
-        if (data.age === player.age) {
-          if (data.type === 'land') landUnits.push({ type, data });
-          else if (data.type === 'sea') navalUnits.push({ type, data });
-          else if (data.type === 'air') airUnits.push({ type, data });
+    
+    // Set up event listeners
+    function setupEventListeners() {
+      // Tab switching
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = tab.getAttribute('data-tab');
+          switchTab(tabName);
+        });
+      });
+      
+      // Canvas interactions
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('click', handleCanvasClick);
+      canvas.addEventListener('contextmenu', e => e.preventDefault());
+      
+      // Map dragging
+      canvas.addEventListener('mousedown', e => {
+        if (e.button === 2) { // right mouse button
+          isDragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
         }
       });
-
-      const createButton = (type, data, container, action, label) => {
-        const button = document.createElement('button');
-        let costText = `${data.cost.gold} Gold`;
-        if (data.cost.oil) costText += `, ${data.cost.oil} Oil`;
-        if (data.cost.manpower) costText += `, ${data.cost.manpower} Manpower`;
-        button.textContent = `${label} (${costText})`;
-        button.onclick = () => window[action](type);
-        if (action === 'researchUnit' && player.unlockedUnits.includes(type)) button.disabled = true;
-        if (action === 'produceUnit' && !player.unlockedUnits.includes(type)) button.disabled = true;
-        if (player.resources.gold < data.cost.gold || player.resources.oil < (data.cost.oil || 0) || player.resources.manpower < (data.cost.manpower || 0)) button.disabled = true;
-        container.appendChild(button);
-      };
-
-      ['Land Units', 'Naval Units', 'Air Units'].forEach(category => {
-        const units = category === 'Land Units' ? landUnits : category === 'Naval Units' ? navalUnits : airUnits;
-        if (units.length) {
-          const researchDiv = document.createElement('div');
-          researchDiv.className = 'unit-category';
-          researchDiv.innerHTML = `<h4>${category}</h4>`;
-          const unitDiv = document.createElement('div');
-          unitDiv.className = 'unit-category';
-          unitDiv.innerHTML = `<h4>${category}</h4>`;
-          units.forEach(({ type, data }) => {
-            createButton(type, data, researchDiv, 'researchUnit', data.prompt.split(',')[0].replace('A photograph of a ', ''));
-            createButton(type, data, unitDiv, 'produceUnit', data.prompt.split(',')[0].replace('A photograph of a ', ''));
-          });
-          researchContainer.appendChild(researchDiv);
-          unitContainer.appendChild(unitDiv);
+      
+      canvas.addEventListener('mouseup', e => {
+        if (e.button === 2) {
+          isDragging = false;
         }
       });
     }
-
-    // Draw map, units, and buildings
-    function draw() {
-      try {
-        console.log('Drawing game state...');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const player = gameState.players[gameState.currentPlayer - 1];
-        const visionTiles = getVisionTiles(player);
-
-        for (let y = 0; y < mapSize; y++) {
-          for (let x = 0; x < mapSize; x++) {
-            const terrain = gameState.map[y][x];
-            const isVisible = visionTiles.some(t => t.x === x && t.y === y);
-            ctx.fillStyle = isVisible || gameState.currentPlayer === 2 ? terrainEffects[Object.keys(terrainEffects)[terrain]].color : fogColors[player.age] || '#333333';
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-          }
-        }
-
-        gameState.players.forEach(p => {
-          p.buildings.forEach(building => {
-            const isVisible = visionTiles.some(t => t.x === building.x && t.y === building.y) || p.id === gameState.currentPlayer;
-            if (isVisible) {
-              ctx.fillStyle = buildingColors[building.type] || (p.id === 1 ? 'gray' : 'darkgray');
-              ctx.fillRect(building.x * tileSize + 2, building.y * tileSize + 2, tileSize - 4, tileSize - 4);
-              ctx.fillStyle = 'white';
-              ctx.font = '16px Arial';
-              ctx.fillText(building.type.charAt(0).toUpperCase(), building.x * tileSize + 15, building.y * tileSize + 25);
-              ctx.fillStyle = p.id === 1 ? 'red' : 'blue';
-              ctx.font = '12px Arial';
-              ctx.fillText(`HP:${building.health}`, building.x * tileSize + 5, building.y * tileSize + 10);
-            }
-          });
-        });
-
-        gameState.players.forEach(p => {
-          p.units.forEach(unit => {
-            const isVisible = visionTiles.some(t => t.x === unit.x && t.y === unit.y) || p.id === gameState.currentPlayer;
-            if (isVisible) {
-              if (!unitColors[unit.type]) console.warn(`No color defined for unit: ${unit.type}`);
-              if (assets.unitsLoaded[unit.type] && assets.units[unit.type].complete && assets.units[unit.type].src) {
-                ctx.drawImage(assets.units[unit.type], unit.x * tileSize, unit.y * tileSize, tileSize, tileSize);
-              } else {
-                ctx.fillStyle = unitColors[unit.type] || (p.id === 1 ? 'red' : 'blue');
-                ctx.fillRect(unit.x * tileSize + 5, unit.y * tileSize + 5, tileSize - 10, tileSize - 10);
-                ctx.fillStyle = 'white';
-                ctx.font = '16px Arial';
-                ctx.fillText(unit.type.charAt(0).toUpperCase(), unit.x * tileSize + 15, unit.y * tileSize + 25);
-              }
-              ctx.fillStyle = p.id === 1 ? 'red' : 'blue';
-              ctx.font = '12px Arial';
-              ctx.fillText(`HP:${unit.health} XP:${unit.xp || 0}`, unit.x * tileSize + 5, unit.y * tileSize + 10);
-            }
-          });
-        });
-        updateUI();
-        console.log('Draw completed.');
-      } catch (e) {
-        console.error('Error drawing game state:', e);
-      }
-    }
-
-    // Update UI
-    function updateUI() {
-      try {
-        document.getElementById('currentPlayer').textContent = gameState.currentPlayer;
-        document.getElementById('currentAge').textContent = gameState.players[gameState.currentPlayer - 1].age;
-        document.getElementById('gold').textContent = gameState.players[gameState.currentPlayer - 1].resources.gold;
-        document.getElementById('oil').textContent = gameState.players[gameState.currentPlayer - 1].resources.oil;
-        document.getElementById('manpower').textContent = gameState.players[gameState.currentPlayer - 1].resources.manpower;
-        document.getElementById('weather').textContent = gameState.weather;
-        document.getElementById('diplomacyStatus').textContent = gameState.players[gameState.currentPlayer - 1].diplomacy.status;
+    
+    // Switch between tabs
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+      document.getElementById(`${tabName}-tab`).classList.add('active');
+      
+      // Update research and unit tabs
+      if (tabName === 'research') {
+        updateResearchButtons();
+      } else if (tabName === 'units') {
         updateUnitButtons();
-      } catch (e) {
-        console.error('Error updating UI:', e);
       }
     }
-
-    // Get tiles within vision
-    function getVisionTiles(player) {
-      const tiles = [];
-      player.units.forEach(unit => {
-        tiles.push({ x: unit.x, y: unit.y });
-        const vision = unitTypes[unit.type].vision;
-        for (let dx = -vision; dx <= vision; dx++) {
-          for (let dy = -vision; dy <= vision; dy++) {
-            if (Math.abs(dx) + Math.abs(dy) <= vision) {
-              const x = unit.x + dx;
-              const y = unit.y + dy;
-              if (x >= 0 && x < mapSize && y >= 0 && y < mapSize) {
-                tiles.push({ x, y });
-              }
-            }
-          }
+    
+    // Toggle tech tree display
+    function toggleTechTree() {
+      const techTree = document.getElementById('techTree');
+      if (techTree.style.display === 'block') {
+        techTree.style.display = 'none';
+      } else {
+        renderTechTree();
+        techTree.style.display = 'block';
+      }
+    }
+    
+    // Render tech tree visualization
+    function renderTechTree() {
+      const techTree = document.getElementById('techTree');
+      const player = gameState.players[gameState.currentPlayer - 1];
+      const ageData = technologies[player.age];
+      
+      let html = `<h4>${player.age} Technologies</h4><ul>`;
+      
+      for (const tech in ageData) {
+        const techData = ageData[tech];
+        const isResearched = player.technologies.includes(tech);
+        const prereqsMet = techData.prerequisites.every(prereq => player.technologies.includes(prereq));
+        
+        html += `<li style="color: ${isResearched ? 'green' : (!prereqsMet ? 'gray' : 'black')}">
+          ${tech} - Unlocks: ${techData.unlocks.join(', ')} ${isResearched ? '✓' : ''}
+          ${techData.prerequisites.length > 0 ? `<br>Requires: ${techData.prerequisites.join(', ')}` : ''}
+        </li>`;
+      }
+      
+      html += '</ul>';
+      techTree.innerHTML = html;
+    }
+    
+    // Update research buttons based on current player age and technologies
+    function updateResearchButtons() {
+      const container = document.getElementById('researchButtons');
+      container.innerHTML = '';
+      
+      const player = gameState.players[gameState.currentPlayer - 1];
+      const ageData = technologies[player.age];
+      
+      if (!ageData) return;
+      
+      for (const tech in ageData) {
+        const techData = ageData[tech];
+        const isResearched = player.technologies.includes(tech);
+        const prereqsMet = techData.prerequisites.every(prereq => player.technologies.includes(prereq));
+        
+        const button = document.createElement('button');
+        button.textContent = `${tech} (${techData.cost} Gold)`;
+        button.disabled = isResearched || !prereqsMet;
+        button.title = techData.description;
+        
+        if (isResearched) {
+          button.textContent += ' ✓';
+          button.style.background = '#48BB78';
+        } else if (!prereqsMet) {
+          button.textContent += ' 🔒';
+        }
+        
+        button.onclick = () => startResearch(tech);
+        container.appendChild(button);
+      }
+      
+      // Update research progress bar
+      const progressBar = document.getElementById('researchProgressBar');
+      if (player.currentResearch) {
+        progressBar.style.width = `${player.researchProgress}%`;
+        document.getElementById('researchProgressLabel').textContent = 
+          `Researching ${player.currentResearch}: ${Math.floor(player.researchProgress)}%`;
+      } else {
+        progressBar.style.width = '0%';
+        document.getElementById('researchProgressLabel').textContent = 'No research in progress';
+      }
+    }
+    
+    // Start researching a technology
+    function startResearch(techName) {
+      const player = gameState.players[gameState.currentPlayer - 1];
+      const tech = technologies[player.age][techName];
+      
+      if (player.resources.gold < tech.cost) {
+        showNotification('Not enough gold for research');
+        return;
+      }
+      
+      player.resources.gold -= tech.cost;
+      player.currentResearch = techName;
+      player.researchProgress = 0;
+      
+      updateResourceDisplay();
+      updateResearchButtons();
+      showNotification(`Started research: ${techName}`);
+    }
+    
+    // Complete research and unlock new units/buildings
+    function completeResearch(playerIndex) {
+      const player = gameState.players[playerIndex];
+      
+      if (!player.currentResearch) return;
+      
+      const tech = technologies[player.age][player.currentResearch];
+      player.technologies.push(player.currentResearch);
+      
+      // Unlock new units
+      tech.unlocks.forEach(unlock => {
+        if (unitTypes[unlock] && !player.unlockedUnits.includes(unlock)) {
+          player.unlockedUnits.push(unlock);
         }
       });
-      player.buildings.forEach(building => {
-        tiles.push({ x: building.x, y: building.y });
-        const vision = buildingTypes[building.type].vision;
-        for (let dx = -vision; dx <= vision; dx++) {
-          for (let dy = -vision; dy <= vision; dy++) {
-            if (Math.abs(dx) + Math.abs(dy) <= vision) {
-              const x = building.x + dx;
-              const y = building.y + dy;
-              if (x >= 0 && x < mapSize && y >= 0 && y < mapSize) {
-                tiles.push({ x, y });
-              }
-            }
-          }
-        }
-      });
-      return [...new Set(tiles.map(t => `${t.x},${t.y}`))].map(str => {
-        const [x, y] = str.split(',').map(Number);
-        return { x, y };
+      
+      showNotification(`${player.name} completed research: ${player.currentResearch}`);
+      player.currentResearch = null;
+      player.researchProgress = 0;
+      
+      updateResearchButtons();
+      updateUnitButtons();
+    }
+    
+    // Update unit production buttons
+    function updateUnitButtons() {
+      const container = document.getElementById('unitButtons');
+      container.innerHTML = '';
+      
+      const player = gameState.players[gameState.currentPlayer - 1];
+      const unlockedUnits = player.unlockedUnits;
+      
+      unlockedUnits.forEach(unitType => {
+        if (!unitTypes[unitType]) return;
+        
+        const unit = unitTypes[unitType];
+        const button = document.createElement('button');
+        
+        let costText = `${unit.cost.gold} Gold`;
+        if (unit.cost.manpower) costText += `, ${unit.cost.manpower} Manpower`;
+        if (unit.cost.oil) costText += `, ${unit.cost.oil} Oil`;
+        
+        button.textContent = `${unitType.charAt(0).toUpperCase() + unitType.slice(1)} (${costText})`;
+        
+        const canAfford = 
+          player.resources.gold >= unit.cost.gold && 
+          (!unit.cost.manpower || player.resources.manpower >= unit.cost.manpower) &&
+          (!unit.cost.oil || player.resources.oil >= unit.cost.oil);
+        
+        button.disabled = !canAfford;
+        button.onclick = () => createUnit(unitType);
+        container.appendChild(button);
       });
     }
-
-    // Research a unit
-    function researchUnit(type) {
-      try {
-        const player = gameState.players[gameState.currentPlayer - 1];
-        const unit = unitTypes[type];
-        if (unit.age !== player.age) {
-          alert(`You must be in the ${unit.age} to research this unit!`);
-          return;
-        }
-        if (player.unlockedUnits.includes(type)) {
-          alert('Unit already researched!');
-          return;
-        }
-        const researchCost = {
-          gold: Math.ceil(unit.cost.gold / 2),
-          oil: Math.ceil((unit.cost.oil || 0) / 2),
-          manpower
+    
+    // Create a new unit
+    function createUnit(unitType) {
+      const player = gameState.players[gameState.currentPlayer - 1];
+      const unit = unitTypes[unitType];
+      
+      // Check if player can afford the unit
+      if (
+        player.resources.gold < unit.cost.gold || 
+        (unit.cost.manpower && player.resources.manpower < unit.cost.manpower) ||
+        (unit.cost.oil && player.resources.oil < unit.cost.oil)
+      ) {
+        showNotification('Not enough resources');
+        return;
+      }
+      
+      // Find valid position near HQ
+      const hq = player.buildings.find(b => b.type === 'hq');
+      if (!hq) {
+        showNotification('No headquarters found');
+        return;
+      }
+      
+      // Look for empty tile around HQ
