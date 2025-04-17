@@ -3,8 +3,12 @@ import {
   processUnitUpkeep, 
   processResearch, 
   processAgeProgress,
-  advanceAge
+  processProductionQueues,
+  advanceAge,
+  updatePopulationCap,
+  createNewCity
 } from './gameState.js';
+import { resetMovementPoints } from './movement.js';
 
 import { 
   updateResourceDisplay, 
@@ -31,6 +35,8 @@ export function endTurn(gameState, render) {
   processUnitUpkeep(gameState, gameState.currentPlayer - 1);
   processResearch(gameState, gameState.currentPlayer - 1);
   processAgeProgress(gameState, gameState.currentPlayer - 1);
+  processProductionQueues(gameState, gameState.currentPlayer - 1);
+  updatePopulationCap(gameState, gameState.currentPlayer - 1);
   
   // Process world events and check for new ones
   if (gameState.worldEvents && gameState.worldEvents.length > 0) {
@@ -47,6 +53,9 @@ export function endTurn(gameState, render) {
   
   // Switch to next player or advance turn
   gameState.currentPlayer = (gameState.currentPlayer % 2) + 1;
+  
+  // Reset movement points for all units of the current player
+  resetMovementPoints(gameState.players[gameState.currentPlayer - 1].units);
   
   if (gameState.currentPlayer === 1) {
     // Start of a new turn
@@ -280,28 +289,69 @@ export function buildStructure(gameState, x, y) {
   const building = buildingTypes[gameState.selectedBuildingType];
   const tile = gameState.map[y][x];
   
-  // Check if location is valid
-  if (tile.unit || tile.building || tile.type === 'water') {
-    showNotification('Cannot build here');
+  // Check if location is valid using the buildings module function
+  const { canPlace, reason } = buildingTypes.canPlaceBuilding(gameState.selectedBuildingType, x, y, gameState);
+  
+  if (!canPlace) {
+    showNotification(reason);
     gameState.selectedBuildingType = null;
     return false;
   }
   
-  // Create building
-  const newBuilding = {
+  // Check if player has resources to build
+  if (building.cost) {
+    for (const resource in building.cost) {
+      if (!player.resources[resource] || player.resources[resource] < building.cost[resource]) {
+        showNotification(`Not enough ${resource} to build ${gameState.selectedBuildingType}`);
+        gameState.selectedBuildingType = null;
+        return false;
+      }
+    }
+    
+    // Deduct resources
+    for (const resource in building.cost) {
+      player.resources[resource] -= building.cost[resource];
+    }
+  }
+  
+  // Add to building queue instead of directly building
+  player.buildingQueue.push({
+    type: gameState.selectedBuildingType,
+    x: x,
+    y: y,
+    progress: 0
+  });
+  
+  // Show building in progress on the map
+  tile.buildingInProgress = {
     type: gameState.selectedBuildingType,
     owner: gameState.currentPlayer,
-    x: x,
-    y: y
+    progress: 0
   };
   
-  // Add to player's buildings and map
-  player.buildings.push(newBuilding);
-  tile.building = { type: gameState.selectedBuildingType, owner: gameState.currentPlayer };
-  
-  // Reveal area around building
-  if (building && building.vision) {
-    revealArea(gameState, x, y, building.vision, gameState.currentPlayer - 1);
+  // Instant build for HQ (city center) at game start
+  if (gameState.selectedBuildingType === 'hq' && player.buildings.length === 0) {
+    // Create building instantly
+    const newBuilding = {
+      type: gameState.selectedBuildingType,
+      owner: gameState.currentPlayer,
+      x: x,
+      y: y
+    };
+    
+    // Add to player's buildings and map
+    player.buildings.push(newBuilding);
+    tile.building = { type: gameState.selectedBuildingType, owner: gameState.currentPlayer };
+    tile.buildingInProgress = null;
+    player.buildingQueue.shift(); // Remove from queue
+    
+    // Create new city
+    createNewCity(gameState, gameState.currentPlayer - 1, x, y);
+    
+    // Reveal area around building
+    if (building.vision) {
+      revealArea(gameState, x, y, building.vision, gameState.currentPlayer - 1);
+    }
   }
   
   // Reset selection
@@ -310,5 +360,122 @@ export function buildStructure(gameState, x, y) {
   // Update UI
   updateResourceDisplay(gameState);
   
+  // Show notification about construction
+  if (gameState.selectedBuildingType === 'hq') {
+    showNotification(`${gameState.selectedBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} built!`);
+  } else {
+    showNotification(`${gameState.selectedBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} construction started`);
+  }
+  
+  return true;
+}
+
+// Add unit to production queue
+export function queueUnit(gameState, buildingId, unitType) {
+  const player = gameState.players[gameState.currentPlayer - 1];
+  const building = player.buildings[buildingId];
+  const unitData = unitTypes[unitType];
+  
+  if (!building || !unitData) return false;
+  
+  // Check if building can produce this unit type
+  const buildingData = buildingTypes[building.type];
+  
+  if (buildingData.category !== "production" || buildingData.unitType !== unitData.type) {
+    showNotification(`This building cannot produce ${unitType} units`);
+    return false;
+  }
+  
+  // Check queue capacity
+  if (!building.unitQueue) building.unitQueue = [];
+  if (building.unitQueue.length >= buildingData.queueCapacity) {
+    showNotification(`Production queue is full (${buildingData.queueCapacity} max)`);
+    return false;
+  }
+  
+  // Check if player has resources
+  if (unitData.cost) {
+    for (const resource in unitData.cost) {
+      if (!player.resources[resource] || player.resources[resource] < unitData.cost[resource]) {
+        showNotification(`Not enough ${resource} to build ${unitType}`);
+        return false;
+      }
+    }
+    
+    // Deduct resources
+    for (const resource in unitData.cost) {
+      player.resources[resource] -= unitData.cost[resource];
+    }
+  }
+  
+  // Add to queue
+  building.unitQueue.push({
+    type: unitType,
+    progress: 0
+  });
+  
+  // Update UI
+  updateResourceDisplay(gameState);
+  updateProductionQueues(gameState);
+  
+  showNotification(`Added ${unitType} to production queue`);
+  return true;
+}
+
+// Cancel item from production queue and refund 50% of cost
+export function cancelQueueItem(gameState, isBuilding, buildingId, queueIndex) {
+  const player = gameState.players[gameState.currentPlayer - 1];
+  
+  if (isBuilding) {
+    // Cancel building
+    if (queueIndex >= player.buildingQueue.length) return false;
+    
+    const buildingItem = player.buildingQueue[queueIndex];
+    const buildingData = buildingTypes[buildingItem.type];
+    
+    // Refund 50% of cost
+    if (buildingData.cost) {
+      for (const resource in buildingData.cost) {
+        const refundAmount = Math.floor(buildingData.cost[resource] * 0.5);
+        if (!player.resources[resource]) player.resources[resource] = 0;
+        player.resources[resource] += refundAmount;
+      }
+    }
+    
+    // Remove from queue
+    player.buildingQueue.splice(queueIndex, 1);
+    
+    // Remove in-progress marker from map
+    if (queueIndex === 0) {
+      gameState.map[buildingItem.y][buildingItem.x].buildingInProgress = null;
+    }
+    
+  } else {
+    // Cancel unit production
+    if (buildingId >= player.buildings.length) return false;
+    
+    const building = player.buildings[buildingId];
+    if (!building.unitQueue || queueIndex >= building.unitQueue.length) return false;
+    
+    const unitItem = building.unitQueue[queueIndex];
+    const unitData = unitTypes[unitItem.type];
+    
+    // Refund 50% of cost
+    if (unitData.cost) {
+      for (const resource in unitData.cost) {
+        const refundAmount = Math.floor(unitData.cost[resource] * 0.5);
+        if (!player.resources[resource]) player.resources[resource] = 0;
+        player.resources[resource] += refundAmount;
+      }
+    }
+    
+    // Remove from queue
+    building.unitQueue.splice(queueIndex, 1);
+  }
+  
+  // Update UI
+  updateResourceDisplay(gameState);
+  
+  showNotification('Production cancelled, 50% resources refunded');
   return true;
 }

@@ -23,6 +23,11 @@
         <p>Turn: <span id="turnCounter">1</span> | Year: <span id="yearCounter">3000 BCE</span></p>
       </div>
       
+      <div class="population-container">
+        <p>Population: <span id="populationCount">5</span>/<span id="populationCap">5</span></p>
+        <p>Happiness: <span id="happinessLevel">0</span> | Health: <span id="healthLevel">0</span></p>
+      </div>
+      
       <div class="upkeep-container">
         <div class="upkeep-title">Resource Consumption Per Turn:</div>
         <div class="upkeep-list" id="upkeepList">None</div>
@@ -30,6 +35,7 @@
       
       <div class="tab-container">
         <div class="tab active" data-tab="actions">Actions</div>
+        <div class="tab" data-tab="cities">Cities</div>
         <div class="tab" data-tab="research">Research</div>
         <div class="tab" data-tab="units">Units</div>
         <div class="tab" data-tab="diplomacy">Diplomacy</div>
@@ -43,8 +49,43 @@
           <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
         </div>
         <h3>Construct Building</h3>
+        <div class="building-category-selector">
+          <select id="buildingCategoryFilter" onchange="filterBuildingsByCategory()">
+            <option value="all">All Buildings</option>
+            <option value="resource_node">Resource Buildings</option>
+            <option value="production">Production Buildings</option>
+            <option value="economic">Economic Buildings</option>
+            <option value="defense">Defense Buildings</option>
+            <option value="housing">Housing</option>
+          </select>
+        </div>
         <div class="building-buttons">
           <!-- Building buttons will be populated dynamically -->
+        </div>
+      </div>
+      
+      <div class="tab-content" id="cities-tab">
+        <h3>Your Cities</h3>
+        <div id="cityList">
+          <!-- City list will be populated dynamically -->
+          <div class="no-cities">No cities founded yet</div>
+        </div>
+        <div class="production-queue">
+          <h3>Production Queues</h3>
+          <div class="building-queue">
+            <h4>Building Queue</h4>
+            <div id="buildingQueueList">
+              <!-- Building queue items will be populated dynamically -->
+              <div class="empty-queue">No buildings in queue</div>
+            </div>
+          </div>
+          <div class="unit-queue">
+            <h4>Unit Queue</h4>
+            <div id="unitQueueList">
+              <!-- Unit queue items will be populated dynamically -->
+              <div class="empty-queue">No units in queue</div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -61,7 +102,16 @@
       
       <div class="tab-content" id="units-tab">
         <h3>Produce Unit</h3>
-        <div class="unit-buttons" id="unitButtons"></div>
+        <div class="unit-production-container">
+          <div>
+            <h4>Production Building</h4>
+            <select id="productionBuildingSelector">
+              <option value="">Select a production building</option>
+              <!-- Building options will be populated dynamically -->
+            </select>
+          </div>
+          <div class="unit-buttons" id="unitButtons"></div>
+        </div>
       </div>
       
       <div class="tab-content" id="diplomacy-tab">
@@ -74,6 +124,15 @@
           <option value="peace">Negotiate Peace</option>
         </select>
         
+        <div class="trade-routes-container">
+          <h3>Trade Routes</h3>
+          <div id="tradeRoutesList">
+            <!-- Trade routes will be populated dynamically -->
+            <div class="no-trade-routes">No active trade routes</div>
+          </div>
+          <button onclick="createTradeRoute()" id="createTradeRouteBtn">Create Trade Route</button>
+        </div>
+        
         <h3>Game Settings</h3>
         <select id="aiDifficulty" onchange="setAIDifficulty()">
           <option value="easy">AI: Easy</option>
@@ -81,6 +140,11 @@
           <option value="hard">AI: Hard</option>
         </select>
         <button onclick="toggleFogOfWar()">Toggle Fog of War</button>
+        <div class="taxation-control">
+          <h4>Tax Rate: <span id="taxRateDisplay">0%</span></h4>
+          <input type="range" id="taxSlider" min="0" max="20" value="0" onchange="adjustTaxRate(this.value)">
+          <p>Higher taxes increase gold but reduce happiness</p>
+        </div>
       </div>
     </div>
   </div>

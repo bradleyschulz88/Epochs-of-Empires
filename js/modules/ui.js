@@ -2,7 +2,7 @@ import { resourceIcons, resourcesByAge } from './resources.js';
 import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
 import { technologies } from './technologies.js';
-import { buildingTypes } from './buildings.js';
+import { buildingTypes, buildingCategories } from './buildings.js';
 import { revealArea } from './map.js';
 
 // Update the resource display
@@ -30,6 +30,30 @@ export function updateResourceDisplay(gameState) {
     
     resourceElement.title = resourceIcons[resourceType];
     container.appendChild(resourceElement);
+  }
+  
+  // Update population display
+  updatePopulationDisplay(gameState);
+}
+
+// Update the population display
+export function updatePopulationDisplay(gameState) {
+  const player = gameState.players[gameState.currentPlayer - 1];
+  
+  // Update population counts
+  document.getElementById('populationCount').textContent = Math.floor(player.totalPopulation);
+  document.getElementById('populationCap').textContent = player.populationCap;
+  
+  // Update happiness and health
+  document.getElementById('happinessLevel').textContent = player.happiness;
+  document.getElementById('healthLevel').textContent = player.health;
+  
+  // Visual indicator for overpopulation
+  const popContainer = document.querySelector('.population-container');
+  if (player.totalPopulation >= player.populationCap) {
+    popContainer.classList.add('overpopulated');
+  } else {
+    popContainer.classList.remove('overpopulated');
   }
 }
 
@@ -253,6 +277,43 @@ export function showNotification(message) {
   }, 3000);
 }
 
+// Get tooltip content for a unit, including movement points
+export function getUnitTooltipContent(unit) {
+  let content = `Unit: ${unit.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`;
+  content += `<br>Owner: Player ${unit.owner}`;
+  
+  if (unit.health) {
+    content += `<br>Health: ${unit.health}%`;
+  }
+  
+  // Add movement points if available
+  if (unit.remainingMP !== undefined) {
+    const unitTypeInfo = unitTypes[unit.type];
+    const maxMP = unitTypeInfo ? unitTypeInfo.move : 0;
+    content += `<br>MP: ${unit.remainingMP}/${maxMP}`;
+  }
+  
+  // Add cargo info for transports
+  if (unit.cargo && unit.cargo.length > 0) {
+    const unitTypeInfo = unitTypes[unit.type];
+    const capacity = unitTypeInfo.capacity || 0;
+    content += `<br>Cargo: ${unit.cargo.length}/${capacity}`;
+    
+    // List cargo contents
+    unit.cargo.forEach(cargoUnit => {
+      content += `<br> - ${cargoUnit.type}`;
+    });
+  }
+  
+  // Add special abilities
+  const unitTypeInfo = unitTypes[unit.type];
+  if (unitTypeInfo && unitTypeInfo.abilities && unitTypeInfo.abilities.length > 0) {
+    content += `<br>Abilities: ${unitTypeInfo.abilities.join(', ')}`;
+  }
+  
+  return content;
+}
+
 // Render the game map
 export function render(gameState, canvasData) {
   const { 
@@ -340,6 +401,17 @@ export function render(gameState, canvasData) {
             ctx.fillStyle = '#0f0';
             const healthWidth = (tileSize - 10) * (tile.unit.health / 100);
             ctx.fillRect(screenX + 5, screenY + tileSize - 8, healthWidth, 3);
+          }
+          
+          // Draw movement points indicator for current player's units
+          if (tile.unit.owner === gameState.currentPlayer && tile.unit.remainingMP !== undefined) {
+            const unitTypeInfo = unitTypes[tile.unit.type];
+            const maxMP = unitTypeInfo ? unitTypeInfo.move : 0;
+            
+            // Display small MP indicator
+            ctx.fillStyle = '#fff';
+            ctx.font = '8px Arial';
+            ctx.fillText(`${tile.unit.remainingMP}/${maxMP}`, screenX + 2, screenY + 8);
           }
         }
         

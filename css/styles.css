@@ -32,3 +32,48 @@ select { margin: 5px; padding: 8px; width: 100%; border-radius: 4px; border: 1px
 .upkeep-container { margin-top: 5px; padding: 10px; border: 1px solid #edf2f7; border-radius: 4px; }
 .upkeep-title { font-weight: bold; margin-bottom: 5px; }
 .upkeep-list { font-size: 12px; }
+
+/* New styles for city and population systems */
+.population-container { margin-top: 10px; padding: 10px; border: 1px solid #edf2f7; border-radius: 4px; transition: background-color 0.3s; }
+.population-container.overpopulated { background-color: #fed7d7; border-color: #f56565; }
+.population-container p { margin: 5px 0; }
+
+/* City styles */
+#cityList { max-height: 150px; overflow-y: auto; margin-bottom: 15px; }
+.city-item { padding: 10px; margin: 5px 0; background: #edf2f7; border-radius: 4px; border-left: 4px solid #4a5568; }
+.city-item .city-name { font-weight: bold; font-size: 16px; }
+.city-item .city-stats { display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; }
+.city-item .city-buildings { margin-top: 5px; font-size: 12px; color: #4a5568; }
+.no-cities { padding: 20px; text-align: center; color: #718096; }
+
+/* Production queue styles */
+.production-queue { margin-top: 15px; }
+.building-queue, .unit-queue { margin-bottom: 15px; }
+.queue-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin: 5px 0; background: #edf2f7; border-radius: 4px; }
+.queue-item .progress-mini { width: 40%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.queue-item .progress-mini-bar { height: 100%; background: #4a5568; }
+.queue-item .cancel-btn { background: #f56565; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+.queue-item .cancel-btn:hover { background: #e53e3e; }
+.empty-queue { padding: 10px; text-align: center; color: #718096; font-style: italic; }
+
+/* Building category filter */
+.building-category-selector { margin-bottom: 10px; }
+.building-category-selector select { background-color: #edf2f7; }
+
+/* Unit production container */
+.unit-production-container { margin-top: 10px; }
+.unit-production-container h4 { margin: 5px 0; color: #4a5568; }
+
+/* Trade routes */
+.trade-routes-container { margin-top: 15px; }
+#tradeRoutesList { max-height: 150px; overflow-y: auto; margin-bottom: 15px; }
+.trade-route-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin: 5px 0; background: #edf2f7; border-radius: 4px; }
+.trade-route-item .route-details { font-size: 13px; }
+.trade-route-item .delete-route { color: #f56565; cursor: pointer; }
+.no-trade-routes { padding: 10px; text-align: center; color: #718096; font-style: italic; }
+
+/* Tax controls */
+.taxation-control { margin-top: 15px; padding: 10px; background-color: #edf2f7; border-radius: 4px; }
+.taxation-control h4 { margin: 5px 0; }
+.taxation-control p { font-size: 12px; color: #4a5568; margin: 5px 0; }
+.taxation-control input[type="range"] { width: 100%; margin: 10px 0; }
