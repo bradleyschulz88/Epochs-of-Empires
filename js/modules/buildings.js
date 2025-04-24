@@ -23,6 +23,8 @@ export const buildingTypes = {
     description: "Provides food for your population.",
     age: "Stone Age",
     terrainRequirement: ["plains", "land"],
+    resourceType: "food",
+    qualityBonus: true, // Can benefit from soil quality
     buildTime: 3
   },
   logging_camp: { 
@@ -34,6 +36,8 @@ export const buildingTypes = {
     description: "Harvests wood from forests.",
     age: "Stone Age",
     terrainRequirement: ["forest"],
+    resourceType: "wood",
+    qualityBonus: true, // Can benefit from forest quality
     buildTime: 3
   },
   quarry: { 
@@ -45,6 +49,8 @@ export const buildingTypes = {
     description: "Extracts stone from hills and mountains.",
     age: "Bronze Age",
     terrainRequirement: ["hills", "mountain"],
+    resourceType: "stone",
+    qualityBonus: true, // Can benefit from deposit quality
     buildTime: 4
   },
   mine: { 
@@ -56,7 +62,23 @@ export const buildingTypes = {
     description: "Extracts iron ore from mountains.",
     age: "Iron Age",
     terrainRequirement: ["mountain"],
+    resourceType: "ironOre",
+    qualityBonus: true, // Can benefit from deposit quality
     buildTime: 4
+  },
+  gold_mine: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { gold: 10 },
+    cost: { wood: 30, stone: 20 },
+    description: "Extracts gold from specific mountain deposits.",
+    age: "Medieval Age",
+    terrainRequirement: ["mountain", "hills"],
+    resourceType: "gold",
+    qualityBonus: true, // Can benefit from deposit quality
+    buildTime: 5,
+    rarity: "rare" // Special buildings that can only be built on rare deposits
   },
   oil_well: { 
     category: "resource_node",
@@ -67,7 +89,10 @@ export const buildingTypes = {
     description: "Extracts oil from specific deposits.",
     age: "Renaissance Age",
     terrainRequirement: ["desert", "water"],
-    buildTime: 5
+    resourceType: "oil",
+    qualityBonus: true, // Can benefit from deposit quality
+    buildTime: 5,
+    rarity: "uncommon"
   },
   sulfur_pit: { 
     category: "resource_node",
@@ -78,7 +103,23 @@ export const buildingTypes = {
     description: "Extracts sulfur for gunpowder and explosives.",
     age: "Renaissance Age",
     terrainRequirement: ["desert", "mountain"],
-    buildTime: 5
+    resourceType: "sulfur",
+    qualityBonus: true, // Can benefit from deposit quality
+    buildTime: 5,
+    rarity: "rare"
+  },
+  coal_mine: { 
+    category: "resource_node",
+    defense: 4, 
+    vision: 1, 
+    production: { coal: 15 }, 
+    cost: { gold: 65, wood: 25, stone: 20 },
+    age: "Renaissance Age",
+    terrainRequirement: ["mountain"],
+    resourceType: "coal",
+    qualityBonus: true, // Can benefit from deposit quality
+    buildTime: 5,
+    description: "Extracts coal for industrial use and fuel."
   },
   
   // Production Buildings - military unit training
@@ -261,9 +302,11 @@ export const buildingTypes = {
     vision: 2, 
     production: { food: 15 }, 
     cost: { wood: 30 },
-    description: "Provides food and enables Clubman upkeep. Unlocks additional military units.",
+    description: "Alternative food source through hunting. Works best near forests.",
     age: "Stone Age",
-    unlocks: ["spearthrower"],
+    resourceType: "food",
+    qualityBonus: false, // Fixed production regardless of terrain quality
+    terrainRequirement: ["plains", "forest"],
     buildTime: 3
   },
   lumber_mill: { 
@@ -275,18 +318,10 @@ export const buildingTypes = {
     description: "Improves wood production from nearby forests.",
     age: "Bronze Age",
     terrainRequirement: ["plains", "land"],
+    resourceType: "wood",
     adjacentBonus: {type: "forest", resource: "wood", amount: 5},
+    qualityBonus: true, // Benefits from surrounding forest quality
     buildTime: 4
-  },
-  coal_mine: { 
-    category: "resource_node",
-    defense: 4, 
-    vision: 1, 
-    production: { coal: 15 }, 
-    cost: { gold: 65, wood: 25, stone: 20 },
-    age: "Renaissance Age",
-    terrainRequirement: ["mountain"],
-    buildTime: 5
   }
 };
 
@@ -301,10 +336,44 @@ export const buildingCategories = {
   wonder: "Special projects that provide unique bonuses and can lead to victory"
 };
 
+// Resource extractors for specific resource types
+export const resourceExtractors = {
+  food: ["farm", "hunters_hut"],
+  wood: ["logging_camp", "lumber_mill"],
+  stone: ["quarry"],
+  ironOre: ["mine"],
+  gold: ["gold_mine"],
+  coal: ["coal_mine"],
+  oil: ["oil_well"],
+  sulfur: ["sulfur_pit"],
+  techPoints: ["research_lab"]
+};
+
+// Building upgrade paths
+export const buildingUpgrades = {
+  farm: ["irrigation_system", "mechanized_farm"],
+  logging_camp: ["lumber_mill", "automated_sawmill"],
+  quarry: ["deep_quarry"],
+  mine: ["deep_mine"],
+  gold_mine: ["advanced_gold_mine"]
+};
+
+// Enhanced buildings with quality bonuses
+export const qualityEnhancedBuildings = [
+  "farm", "logging_camp", "quarry", "mine", "gold_mine", "coal_mine", "oil_well", "sulfur_pit", "lumber_mill"
+];
+
 // Get all buildings of a specific category
 export function getBuildingsByCategory(category) {
   return Object.entries(buildingTypes)
     .filter(([_, building]) => building.category === category)
+    .map(([key, _]) => key);
+}
+
+// Get all resource extractors for a given age
+export function getResourceExtractorsByAge(age) {
+  return Object.entries(buildingTypes)
+    .filter(([_, building]) => building.category === "resource_node" && building.age === age)
     .map(([key, _]) => key);
 }
 
@@ -324,6 +393,22 @@ export function canPlaceBuilding(buildingType, x, y, gameState) {
     return { 
       canPlace: false, 
       reason: `Requires ${building.terrainRequirement.join(" or ")} terrain` 
+    };
+  }
+  
+  // Check resource type requirement for resource extractors
+  if (building.resourceType && tile.type !== building.resourceType) {
+    return {
+      canPlace: false,
+      reason: `Must be built on ${building.resourceType} deposit`
+    };
+  }
+  
+  // Check rarity requirement
+  if (building.rarity === "rare" && tile.resourceQuality !== "rich") {
+    return {
+      canPlace: false,
+      reason: `Can only be built on rich ${building.resourceType} deposits`
     };
   }
   
@@ -387,4 +472,18 @@ export function isWithinCityBorders(x, y, playerID, gameState) {
   }
   
   return false;
+}
+
+// Calculate resource production bonus based on resource quality
+export function getQualityProductionBonus(buildingType, resourceQuality) {
+  if (!qualityEnhancedBuildings.includes(buildingType)) {
+    return 1.0; // No bonus for buildings that don't benefit from quality
+  }
+  
+  switch (resourceQuality) {
+    case "poor": return 0.7;
+    case "rich": return 1.5;
+    case "standard":
+    default: return 1.0;
+  }
 }

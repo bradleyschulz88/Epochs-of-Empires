@@ -349,7 +349,13 @@ export function render(gameState, canvasData) {
           minimapCtx.fillStyle = terrainInfo.color;
           minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
         } else if (fogOfWarEnabled) {
-          minimapCtx.fillStyle = '#000';
+          // Draw terrain but overlay with semi-transparent fog on minimap
+          const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
+          minimapCtx.fillStyle = terrainInfo.color;
+          minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
+          
+          // Apply fog of war overlay on minimap
+          minimapCtx.fillStyle = 'rgba(200, 200, 200, 0.7)';
           minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
         }
         
@@ -415,11 +421,36 @@ export function render(gameState, canvasData) {
           }
         }
         
-        // Show resource amount for resource tiles
-        if (Object.keys(terrainTypes).includes(tile.type) && tile.resourceAmount > 0) {
+        // Show resource amount for resource tiles with quality indicator
+        if (Object.keys(resourceTileTypes).includes(tile.type) && tile.resourceAmount > 0) {
+          // Draw quality indicator border
+          let borderColor = '#fff'; // Default for standard
+          if (tile.resourceQuality === 'rich') {
+            borderColor = '#FFC107'; // Gold for rich resources
+          } else if (tile.resourceQuality === 'poor') {
+            borderColor = '#607D8B'; // Grey for poor resources
+          }
+          
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(screenX + 1, screenY + 1, tileSize - 2, tileSize - 2);
+          
+          // Display resource amount
           ctx.fillStyle = '#fff';
           ctx.font = '10px Arial';
           ctx.fillText(tile.resourceAmount.toString(), screenX + 2, screenY + 10);
+          
+          // Display quality indicator in corner
+          ctx.fillStyle = borderColor;
+          ctx.font = '8px Arial Bold';
+          const qualityText = tile.resourceQuality === 'rich' ? 'R' : (tile.resourceQuality === 'poor' ? 'P' : 'S');
+          ctx.fillText(qualityText, screenX + tileSize - 8, screenY + 8);
+          
+          // If resource requires a building to extract, add indicator
+          if (resourceTileTypes[tile.type].buildingRequired) {
+            ctx.fillStyle = '#FF5722';
+            ctx.fillRect(screenX + tileSize - 6, screenY + tileSize - 6, 4, 4);
+          }
         }
         
         // Highlight selected unit
@@ -437,8 +468,18 @@ export function render(gameState, canvasData) {
           ctx.strokeRect(screenX + 2, screenY + 2, tileSize - 4, tileSize - 4);
         }
       } else if (fogOfWarEnabled) {
-        // Draw fog of war
-        ctx.fillStyle = '#000';
+        // Draw terrain but overlay with semi-transparent fog
+        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
+        ctx.fillStyle = terrainInfo.color;
+        ctx.fillRect(screenX, screenY, tileSize, tileSize);
+        
+        // Draw grid lines
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(screenX, screenY, tileSize, tileSize);
+        
+        // Apply semi-transparent fog overlay
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
         ctx.fillRect(screenX, screenY, tileSize, tileSize);
       }
       
@@ -466,7 +507,13 @@ export function render(gameState, canvasData) {
           minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
         }
       } else {
-        minimapCtx.fillStyle = '#000';
+        // Draw terrain but with lighter color on minimap for undiscovered tiles
+        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
+        minimapCtx.fillStyle = terrainInfo.color;
+        minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
+        
+        // Apply fog of war overlay on minimap
+        minimapCtx.fillStyle = 'rgba(200, 200, 200, 0.7)';
         minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
       }
     }
