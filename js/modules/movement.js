@@ -5,19 +5,25 @@ import { unitTypes } from './units.js';
 // Constants for movement
 const ROAD_BONUS_MP = 1;
 const ZOC_EXTRA_COST = 1; // Zone of Control additional cost
+const DEBUG_MOVEMENT = true; // Enable movement debugging
 
 /**
  * Calculate whether a unit can move to a target tile, considering MP and terrain
  * @param {Object} unit - The unit that will move
- * @param {Object} sourceX - X coordinate of the source tile
- * @param {Object} sourceY - Y coordinate of the source tile
- * @param {Object} targetX - X coordinate of the target tile
- * @param {Object} targetY - Y coordinate of the target tile
+ * @param {Number} sourceX - X coordinate of the source tile
+ * @param {Number} sourceY - Y coordinate of the source tile
+ * @param {Number} targetX - X coordinate of the target tile
+ * @param {Number} targetY - Y coordinate of the target tile
  * @param {Array} map - The game map
  * @param {Boolean} isPartOfPath - Whether this is part of a multi-tile path
  * @returns {Object} - Result object with {canMove, cost, reason}
  */
 export function canMoveToTile(unit, sourceX, sourceY, targetX, targetY, map, isPartOfPath = false) {
+    // Ensure unit has movement properties initialized
+    if (unit.remainingMP === undefined || unit.canMove === undefined) {
+        initializeUnitMovement(unit);
+    }
+    
     // Get unit type information
     const unitTypeInfo = unitTypes[unit.type];
     
@@ -38,6 +44,12 @@ export function canMoveToTile(unit, sourceX, sourceY, targetX, targetY, map, isP
     // Check if the target tile has a friendly unit
     if (targetTile.unit && targetTile.unit.owner === unit.owner) {
         return { canMove: false, cost: 0, reason: "Cannot move to a tile with a friendly unit" };
+    }
+    
+    // Check diagonal movement (if not allowed)
+    const isDiagonal = Math.abs(targetX - sourceX) === 1 && Math.abs(targetY - sourceY) === 1;
+    if (isDiagonal && unitTypeInfo.type === 'land' && !(unitTypeInfo.abilities && unitTypeInfo.abilities.includes('mobility'))) {
+        return { canMove: false, cost: 0, reason: "This unit cannot move diagonally" };
     }
     
     // Check terrain passability based on unit type
@@ -126,27 +138,66 @@ function checkTerrainPassability(unitTypeInfo, terrainType, isEmbarked) {
  * @returns {Number} - The movement cost
  */
 function calculateMovementCost(unitTypeInfo, terrainType, map, x, y, unitOwner) {
-    // Get the terrain's movement cost
-    let cost = terrainTypes[terrainType].moveCost;
+    // Check if terrain info exists
+    const terrainInfo = terrainTypes[terrainType];
+    if (!terrainInfo) {
+        if (DEBUG_MOVEMENT) {
+            console.error(`Unknown terrain type: ${terrainType}, using default cost of 1`);
+        }
+        return 1;
+    }
+    
+    // Start with base cost from terrain
+    let cost = terrainInfo.moveCost;
+    
+    // Handle special cases based on unit type
+    if (DEBUG_MOVEMENT) {
+        console.log(`Calculating movement cost for ${unitTypeInfo.type} unit on ${terrainType} terrain (base cost: ${cost})`);
+    }
     
     // Air units always pay 1MP per tile regardless of terrain
     if (unitTypeInfo.type === 'air') {
+        if (DEBUG_MOVEMENT) {
+            console.log(`Air unit movement cost override: 1`);
+        }
         return 1;
     }
     
     // Roads override the underlying terrain cost
     if (terrainType === 'road') {
+        if (DEBUG_MOVEMENT) {
+            console.log(`Road terrain cost override: 1`);
+        }
         return 1; // Fixed cost for roads
     }
     
     // If terrain is water and unit is amphibious
     if (terrainType === 'water' && unitTypeInfo.abilities && unitTypeInfo.abilities.includes('amphibious')) {
+        if (DEBUG_MOVEMENT) {
+            console.log(`Amphibious unit on water cost override: 2`);
+        }
         return 2; // Amphibious units pay 2MP for water
     }
     
+    // Check for mobility ability - reduces terrain cost by 1 (minimum 1)
+    if (unitTypeInfo.abilities && unitTypeInfo.abilities.includes('mobility') && cost > 1) {
+        cost -= 1;
+        if (DEBUG_MOVEMENT) {
+            console.log(`Mobility ability reduces cost to ${cost}`);
+        }
+    }
+    
     // Add Zone of Control cost if there are adjacent enemy units (optional rule)
-    if (hasAdjacentEnemyUnit(map, x, y, unitOwner)) {
+    const hasZOC = hasAdjacentEnemyUnit(map, x, y, unitOwner);
+    if (hasZOC) {
         cost += ZOC_EXTRA_COST;
+        if (DEBUG_MOVEMENT) {
+            console.log(`Zone of Control adds ${ZOC_EXTRA_COST} to cost, new total: ${cost}`);
+        }
+    }
+    
+    if (DEBUG_MOVEMENT) {
+        console.log(`Final movement cost: ${cost}`);
     }
     
     return cost;
@@ -194,12 +245,34 @@ function hasAdjacentEnemyUnit(map, x, y, unitOwner) {
  * @returns {Boolean} - Whether the move was successful
  */
 export function moveUnit(unit, targetX, targetY, map, notifyCallback) {
+    // Ensure unit has movement properties initialized
+    if (unit.remainingMP === undefined || unit.canMove === undefined) {
+        initializeUnitMovement(unit);
+    }
+    
+    // Print debug information if debugging is enabled
+    if (DEBUG_MOVEMENT) {
+        console.log(`Movement attempt - ${unit.type} from (${unit.x},${unit.y}) to (${targetX},${targetY})`);
+        console.log(`Current MP: ${unit.remainingMP}, Can move: ${unit.canMove}`);
+    }
+    
     // Check if the move is valid
     const moveResult = canMoveToTile(unit, unit.x, unit.y, targetX, targetY, map);
     
     if (!moveResult.canMove) {
+        if (DEBUG_MOVEMENT) {
+            console.log(`Movement failed: ${moveResult.reason}`);
+        }
         if (notifyCallback) notifyCallback(moveResult.reason);
         return false;
+    }
+    
+    // Get the terrain type for debugging
+    const sourceTerrainType = map[unit.y][unit.x].type;
+    const targetTerrainType = map[targetY][targetX].type;
+    
+    if (DEBUG_MOVEMENT) {
+        console.log(`Terrain: ${sourceTerrainType} -> ${targetTerrainType}, Movement cost: ${moveResult.cost}`);
     }
     
     // Remove unit from current tile
@@ -212,16 +285,27 @@ export function moveUnit(unit, targetX, targetY, map, notifyCallback) {
     // Place unit on new tile
     map[targetY][targetX].unit = unit;
     
+    // Store old MP for debugging
+    const oldMP = unit.remainingMP;
+    
     // Reduce movement points
     unit.remainingMP -= moveResult.cost;
     
     // Check for road bonus - if on a road, gain +1 bonus MP
+    let roadBonusApplied = false;
     if (map[targetY][targetX].type === 'road') {
+        const beforeRoadBonus = unit.remainingMP;
         unit.remainingMP += ROAD_BONUS_MP;
+        roadBonusApplied = true;
+        
         // But don't exceed the unit's maximum MP
         const maxMP = unitTypes[unit.type].move;
         if (unit.remainingMP > maxMP) {
             unit.remainingMP = maxMP;
+        }
+        
+        if (DEBUG_MOVEMENT) {
+            console.log(`Road bonus: +${ROAD_BONUS_MP} MP (${beforeRoadBonus} -> ${unit.remainingMP})`);
         }
     }
     
@@ -231,6 +315,13 @@ export function moveUnit(unit, targetX, targetY, map, notifyCallback) {
     // If movement points are depleted, mark unit as unable to move
     if (unit.remainingMP <= 0) {
         unit.canMove = false;
+        if (DEBUG_MOVEMENT) {
+            console.log(`${unit.type} has no MP left, marking as unable to move.`);
+        }
+    }
+    
+    if (DEBUG_MOVEMENT) {
+        console.log(`Movement complete: ${oldMP} -> ${unit.remainingMP} MP (${roadBonusApplied ? 'with' : 'without'} road bonus)`);
     }
     
     if (notifyCallback) {
@@ -418,8 +509,34 @@ function checkForCavalryChargeBonus(unit, map) {
  * @param {Array} units - Array of all units
  */
 export function resetMovementPoints(units) {
+    if (!units || units.length === 0) {
+        if (DEBUG_MOVEMENT) {
+            console.log("No units to reset movement points for!");
+        }
+        return;
+    }
+    
+    if (DEBUG_MOVEMENT) {
+        console.log(`Resetting movement points for ${units.length} units`);
+    }
+    
     for (const unit of units) {
+        // Skip units that don't exist anymore (could happen if the unit was destroyed)
+        if (!unit) continue;
+        
         const unitTypeInfo = unitTypes[unit.type];
+        if (!unitTypeInfo) {
+            if (DEBUG_MOVEMENT) {
+                console.error(`Could not find type info for unit type: ${unit.type}`);
+            }
+            continue;
+        }
+        
+        // Record previous values for debugging
+        const oldMP = unit.remainingMP !== undefined ? unit.remainingMP : 'undefined';
+        const oldCanMove = unit.canMove !== undefined ? unit.canMove : 'undefined';
+        
+        // Set new values
         unit.remainingMP = unitTypeInfo.move;
         unit.canMove = true;
         unit.cavalryChargeBonusActive = false;
@@ -428,6 +545,10 @@ export function resetMovementPoints(units) {
         // Store starting position for cavalry charge calculations
         unit.startingX = unit.x;
         unit.startingY = unit.y;
+        
+        if (DEBUG_MOVEMENT) {
+            console.log(`Reset unit ${unit.type} MP: ${oldMP} -> ${unit.remainingMP}, Can move: ${oldCanMove} -> ${unit.canMove}`);
+        }
     }
 }
 
@@ -437,8 +558,23 @@ export function resetMovementPoints(units) {
  */
 export function initializeUnitMovement(unit) {
     const unitTypeInfo = unitTypes[unit.type];
-    unit.remainingMP = unitTypeInfo.move;
-    unit.canMove = true;
+    
+    if (!unitTypeInfo) {
+        if (DEBUG_MOVEMENT) {
+            console.error(`Failed to initialize movement for unit with type: ${unit.type}`);
+        }
+        // Use default values as fallback
+        unit.remainingMP = 1;
+        unit.canMove = true;
+    } else {
+        unit.remainingMP = unitTypeInfo.move;
+        unit.canMove = true;
+        
+        if (DEBUG_MOVEMENT) {
+            console.log(`Initialized unit ${unit.type} with ${unit.remainingMP} MP`);
+        }
+    }
+    
     unit.isEmbarked = false;
     unit.cargo = [];
     unit.startingX = unit.x;
