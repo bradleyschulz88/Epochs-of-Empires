@@ -34,8 +34,14 @@ export function startNewGame(gameState, settings) {
     // Generate map with selected settings
     gameState = generateMap(gameState);
     
-    // Hide start menu overlay
+    // Hide start menu overlay and show game container
     document.getElementById('startMenuOverlay').style.display = 'none';
+    
+    // If game container exists, make it visible
+    const gameContainer = document.getElementById('gameContainer');
+    if (gameContainer) {
+        gameContainer.style.display = 'flex';
+    }
     
     return gameState;
 }
@@ -48,6 +54,18 @@ export function initStartMenu(startGameCallback) {
     // Create start menu if it doesn't exist yet
     if (!document.getElementById('startMenuOverlay')) {
         createStartMenuUI();
+    } else {
+        // If start menu overlay already exists, ensure it's attached to the document
+        const existingOverlay = document.getElementById('startMenuOverlay');
+        if (!document.body.contains(existingOverlay)) {
+            document.body.appendChild(existingOverlay);
+        }
+    }
+    
+    // Make sure the game container is hidden when showing the start menu
+    const gameContainer = document.getElementById('gameContainer');
+    if (gameContainer) {
+        gameContainer.style.display = 'none';
     }
     
     // Show the start menu

@@ -998,20 +998,46 @@ window.openSettings = function() {
 window.startNewGameFromUI = function() {
   // Create a confirmation dialog
   if (confirm("Start a new game? Your current progress will be lost.")) {
-    // Reset game state
+    // Reset game variables
     gameState = createInitialGameState();
-    
-    // Show start menu for new game options
-    const gameContainer = document.getElementById('gameContainer');
-    gameContainer.style.display = 'none';
-    
-    // Store gameState in window for access from settings
     window.gameState = gameState;
+    mouseX = 0;
+    mouseY = 0;
+    cameraOffsetX = 0;
+    cameraOffsetY = 0;
+    isDragging = false;
+    dragStartX = 0;
+    dragStartY = 0;
+    selectedUnit = null;
+    gameStarted = false;
+    currentTab = 'actions';
     
-    // Show the start menu again
-    initStartMenu(startGame);
+    // Clean up any existing game elements
+    if (canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (minimap) {
+      minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+    }
     
-    showNotification("New game initialized. Select your settings.");
+    // Show loading indicator
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) {
+      loadingElement.style.display = 'block';
+    }
+    
+    // Delay to ensure the UI updates before showing start menu
+    setTimeout(() => {
+      // Show the start menu again
+      initStartMenu(startGame);
+      
+      // Hide loading indicator after a short delay
+      setTimeout(() => {
+        if (loadingElement) {
+          loadingElement.style.display = 'none';
+        }
+      }, 500);
+    }, 100);
   }
 };
 
