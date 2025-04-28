@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>War Game</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/start-menu.css">
 </head>
 <body>
   <div id="gameContainer">
@@ -48,6 +49,19 @@
           <div class="progress-bar" id="ageProgressBar"></div>
           <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
         </div>
+        
+        <!-- Unit actions container - shown when unit is selected -->
+        <div id="unit-actions-container" style="display: none; margin: 10px 0;">
+          <h3>Unit Actions</h3>
+          <div id="selected-unit-info"></div>
+          <div class="unit-action-buttons">
+            <button id="move-unit-btn" onclick="window.prepareUnitMove()">Move</button>
+            <button id="attack-unit-btn" onclick="window.prepareUnitAttack()">Attack</button>
+            <button id="fortify-unit-btn" onclick="window.fortifyUnit()">Fortify</button>
+            <button id="skip-unit-btn" onclick="window.skipUnitTurn()">Skip Turn</button>
+          </div>
+        </div>
+        
         <h3>Construct Building</h3>
         <div class="building-category-selector">
           <select id="buildingCategoryFilter" onchange="filterBuildingsByCategory()">
@@ -134,17 +148,17 @@
         </div>
         
         <h3>Game Settings</h3>
-        <select id="aiDifficulty" onchange="setAIDifficulty()">
-          <option value="easy">AI: Easy</option>
-          <option value="medium">AI: Medium</option>
-          <option value="hard">AI: Hard</option>
-        </select>
-        <button onclick="toggleFogOfWar()">Toggle Fog of War</button>
+        <button onclick="openSettings()" class="settings-button">Open Settings</button>
         <div class="taxation-control">
           <h4>Tax Rate: <span id="taxRateDisplay">0%</span></h4>
           <input type="range" id="taxSlider" min="0" max="20" value="0" onchange="adjustTaxRate(this.value)">
           <p>Higher taxes increase gold but reduce happiness</p>
         </div>
+      </div>
+      
+      <div class="menu-links">
+        <button onclick="startNewGameFromUI()">New Game</button>
+        <a href="#" onclick="toggleKeyboardShortcuts(); return false;">Keyboard Shortcuts</a>
       </div>
     </div>
   </div>
@@ -152,6 +166,18 @@
   <div id="tooltip"></div>
   <div id="loading">Loading Game...</div>
   <div id="notification" class="notification"></div>
+  
+  <div id="keyboardShortcuts" class="keyboard-shortcuts">
+    <h4>Keyboard Shortcuts</h4>
+    <ul>
+      <li><kbd>E</kbd> - End Turn</li>
+      <li><kbd>Tab</kbd> - Switch Tabs</li>
+      <li><kbd>Space</kbd> - Select/Deselect Unit</li>
+      <li><kbd>Arrows</kbd> - Move Camera/Selected Unit</li>
+      <li><kbd>+</kbd>/<kbd>-</kbd> - Zoom In/Out</li>
+      <li><kbd>H</kbd> - Show/Hide This Help</li>
+    </ul>
+  </div>
   
   <script type="module" src="js/game.js"></script>
 </body>

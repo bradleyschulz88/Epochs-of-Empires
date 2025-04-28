@@ -22,7 +22,7 @@ import {
 
 import { addResourceNodes, revealArea } from './map.js';
 import { unitTypes } from './units.js';
-import { buildingTypes } from './buildings.js';
+import { buildingTypes, canPlaceBuilding } from './buildings.js';
 import { resourcesByAge } from './resources.js';
 import { worldEvents, diplomacyOptions, factions, logistics } from './constants.js';
 
@@ -35,7 +35,8 @@ export function endTurn(gameState, render) {
   processUnitUpkeep(gameState, gameState.currentPlayer - 1);
   processResearch(gameState, gameState.currentPlayer - 1);
   processAgeProgress(gameState, gameState.currentPlayer - 1);
-  processProductionQueues(gameState, gameState.currentPlayer - 1);
+  // Use our own processProductionQueues function that properly imports from the module
+  processProductionQueues(gameState);
   updatePopulationCap(gameState, gameState.currentPlayer - 1);
   
   // Process world events and check for new ones
@@ -198,6 +199,19 @@ export function handleDiplomacy(gameState, action) {
   document.getElementById('diplomacyStatus').textContent = activePlayer.diplomacy.status;
 }
 
+// Process production queues for the current player
+export function processProductionQueues(gameState) {
+  const playerIndex = gameState.currentPlayer - 1;
+  return processProductionQueuesHelper(gameState, playerIndex);
+}
+
+// Helper for processing production queues
+function processProductionQueuesHelper(gameState, playerIndex) {
+  return import('./gameState.js').then(module => {
+    return module.processProductionQueues(gameState, playerIndex);
+  });
+}
+
 // Process an AI turn
 export function processAITurn(gameState, render) {
   const ai = gameState.players[1]; // AI is player 2
@@ -290,7 +304,7 @@ export function buildStructure(gameState, x, y) {
   const tile = gameState.map[y][x];
   
   // Check if location is valid using the buildings module function
-  const { canPlace, reason } = buildingTypes.canPlaceBuilding(gameState.selectedBuildingType, x, y, gameState);
+  const { canPlace, reason } = canPlaceBuilding(gameState.selectedBuildingType, x, y, gameState);
   
   if (!canPlace) {
     showNotification(reason);
@@ -354,6 +368,9 @@ export function buildStructure(gameState, x, y) {
     }
   }
   
+  // Store the building type before resetting selection
+  const builtBuildingType = gameState.selectedBuildingType;
+  
   // Reset selection
   gameState.selectedBuildingType = null;
   
@@ -361,10 +378,10 @@ export function buildStructure(gameState, x, y) {
   updateResourceDisplay(gameState);
   
   // Show notification about construction
-  if (gameState.selectedBuildingType === 'hq') {
-    showNotification(`${gameState.selectedBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} built!`);
+  if (builtBuildingType === 'hq') {
+    showNotification(`${builtBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} built!`);
   } else {
-    showNotification(`${gameState.selectedBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} construction started`);
+    showNotification(`${builtBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} construction started`);
   }
   
   return true;

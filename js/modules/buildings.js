@@ -383,13 +383,44 @@ export function canPlaceBuilding(buildingType, x, y, gameState) {
   const tile = gameState.map[y][x];
   const currentPlayer = gameState.currentPlayer;
   
+  console.log(`Checking if can place ${buildingType} at (${x},${y}) on terrain: ${tile.type}`);
+  
+  // Handle special case for farms which can be placed on any land
+  if (buildingType === 'farm' && (tile.type === 'plains' || tile.type === 'forest')) {
+    console.log('Farm placement check: Valid plains or forest terrain');
+    return { canPlace: true, reason: 'Valid location for farm' };
+  }
+  
+  // Handle special case for logging_camp which needs forest
+  if (buildingType === 'logging_camp' && tile.type === 'forest') {
+    console.log('Logging camp placement check: Valid forest terrain');
+    return { canPlace: true, reason: 'Valid location for logging camp' };
+  }
+  
+  // Handle special case for houses which can be placed on any land
+  if (buildingType === 'house' && (tile.type === 'plains' || tile.type === 'forest' || tile.type === 'hills')) {
+    console.log('House placement check: Valid terrain for building');
+    // Houses in Stone Age don't require city borders
+    if (gameState.players[currentPlayer-1].age === 'Stone Age') {
+      return { canPlace: true, reason: 'Valid location for house' };
+    }
+  }
+  
+  // Handle special case for hunters_hut
+  if (buildingType === 'hunters_hut' && (tile.type === 'plains' || tile.type === 'forest')) {
+    console.log('Hunters hut placement check: Valid plains or forest terrain');
+    return { canPlace: true, reason: 'Valid location for hunters hut' };
+  }
+  
   // Check if tile already has a building or unit
   if (tile.building || tile.unit) {
+    console.log('Placement check: Tile already occupied');
     return { canPlace: false, reason: "Tile already occupied" };
   }
   
   // Check terrain requirements
   if (building.terrainRequirement && !building.terrainRequirement.includes(tile.type)) {
+    console.log(`Placement check: Terrain requirement not met. Expected ${building.terrainRequirement.join(' or ')}, got ${tile.type}`);
     return { 
       canPlace: false, 
       reason: `Requires ${building.terrainRequirement.join(" or ")} terrain` 
@@ -398,6 +429,7 @@ export function canPlaceBuilding(buildingType, x, y, gameState) {
   
   // Check resource type requirement for resource extractors
   if (building.resourceType && tile.type !== building.resourceType) {
+    console.log(`Placement check: Resource type requirement not met. Expected ${building.resourceType}, got ${tile.type}`);
     return {
       canPlace: false,
       reason: `Must be built on ${building.resourceType} deposit`

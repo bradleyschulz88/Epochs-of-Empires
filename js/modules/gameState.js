@@ -12,103 +12,71 @@ export function createInitialGameState() {
     weather: 'Clear',
     ages: ages, // Store ages here for reference
     players: [
-      {
-        id: 1,
-        name: "Player",
-        color: "#4299E1",
-        faction: "England", // Default faction
-        resources: { 
-          food: 50, 
-          wood: 50
-        },
-        upkeep: {
-          food: 0,
-          wood: 0,
-          stone: 0,
-          ironOre: 0,
-          gold: 0,
-          coal: 0,
-          oil: 0,
-          sulfur: 0,
-          techPoints: 0
-        },
-        units: [],
-        buildings: [],
-        technologies: [],
-        researchProgress: 0,
-        currentResearch: null,
-        age: "Stone Age",
-        ageProgress: 0,
-        unlockedUnits: ["clubman"],
-        diplomacy: { status: "Neutral", allies: [], treaties: [] },
-        
-        // City & Population systems
-        cities: [], // Will contain city objects
-        totalPopulation: 5, // Starting population
-        populationCap: 5, // Base population cap
-        happiness: 0, // Happiness modifier (positive boosts growth)
-        health: 0, // Health modifier (negative impacts growth)
-        
-        // Production queues
-        buildingQueue: [], // Building construction queue
-        unitQueue: [], // Unit production queue
-        
-        // Trade & Economy
-        tradeRoutes: [], // Active trade routes
-        prices: {}, // Market price fluctuations
-        taxRate: 0 // 0-20% tax rate
-      },
-      {
-        id: 2,
-        name: "AI",
-        color: "#F56565",
-        faction: "Germany", // Default faction for AI
-        resources: { 
-          food: 50, 
-          wood: 50
-        },
-        upkeep: {
-          food: 0,
-          wood: 0,
-          stone: 0,
-          ironOre: 0,
-          gold: 0,
-          coal: 0,
-          oil: 0,
-          sulfur: 0,
-          techPoints: 0
-        },
-        units: [],
-        buildings: [],
-        technologies: [],
-        researchProgress: 0,
-        currentResearch: null,
-        age: "Stone Age",
-        ageProgress: 0,
-        unlockedUnits: ["clubman"],
-        diplomacy: { status: "Neutral", allies: [], treaties: [] },
-        isAI: true,
-        
-        // City & Population systems
-        cities: [], // Will contain city objects
-        totalPopulation: 5, // Starting population
-        populationCap: 5, // Base population cap
-        happiness: 0, // Happiness modifier (positive boosts growth)
-        health: 0, // Health modifier (negative impacts growth)
-        
-        // Production queues
-        buildingQueue: [], // Building construction queue
-        unitQueue: [], // Unit production queue
-        
-        // Trade & Economy
-        tradeRoutes: [], // Active trade routes
-        prices: {}, // Market price fluctuations
-        taxRate: 0 // 0-20% tax rate
-      }
+      createPlayerObject(1, "Player", "#4299E1", "England", false),
+      createPlayerObject(2, "AI 1", "#F56565", "Germany", true),
+      // 3 more AI players that can be activated in game settings
+      createPlayerObject(3, "AI 2", "#48BB78", "France", true, true), // inactive by default
+      createPlayerObject(4, "AI 3", "#ECC94B", "Japan", true, true),  // inactive by default
+      createPlayerObject(5, "AI 4", "#9F7AEA", "Egypt", true, true),  // inactive by default
+      createPlayerObject(6, "AI 5", "#ED8936", "Rome", true, true)    // inactive by default
     ],
     map: [],
     worldEvents: [],
-    freeForAll: true // Default mode is Free-for-All
+    freeForAll: true, // Default mode is Free-for-All
+    aiPlayerCount: 1, // Default number of active AI players
+    maxPlayers: 6 // Maximum number of players (including human player)
+  };
+}
+
+// Helper function to create a player object
+function createPlayerObject(id, name, color, faction, isAI = false, inactive = false) {
+  return {
+    id: id,
+    name: name,
+    color: color,
+    faction: faction,
+    resources: { 
+      food: 50, 
+      wood: 50
+    },
+    upkeep: {
+      food: 0,
+      wood: 0,
+      stone: 0,
+      ironOre: 0,
+      gold: 0,
+      coal: 0,
+      oil: 0,
+      sulfur: 0,
+      techPoints: 0
+    },
+    units: [],
+    buildings: [],
+    technologies: [],
+    researchProgress: 0,
+    currentResearch: null,
+    age: "Stone Age",
+    ageProgress: 0,
+    unlockedUnits: ["clubman"],
+    diplomacy: { status: "Neutral", allies: [], treaties: [] },
+    isAI: isAI,
+    inactive: inactive, // Whether this player is active in the current game
+    
+    // City & Population systems
+    cities: [], // Will contain city objects
+    totalPopulation: 5, // Starting population
+    populationCap: 5, // Base population cap
+    happiness: 0, // Happiness modifier (positive boosts growth)
+    health: 0, // Health modifier (negative impacts growth)
+    
+    // Production queues
+    buildingQueue: [], // Building construction queue
+    unitQueue: [], // Unit production queue
+    
+    // Trade & Economy
+    tradeRoutes: [], // Active trade routes
+    prices: {}, // Market price fluctuations
+    taxRate: 0 // 0-20% tax rate
   };
 }
 

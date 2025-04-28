@@ -1,4 +1,6 @@
-import { mapSize } from './constants.js';
+// Map sizes will be determined by settings rather than fixed constants
+const DEFAULT_MAP_SIZE = 30;
+
 import { 
   resourcesByAge, 
   getSimpleResourcesByAge, 
@@ -14,6 +16,9 @@ import { unitTypes } from './units.js';
  * @param {Object} gameState - The game state
  */
 function createBaseTerrain(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const mapType = gameState.mapType || 'continents';
+  
   // Initialize the map with plains
   for (let y = 0; y < mapSize; y++) {
     const row = [];
@@ -33,7 +38,31 @@ function createBaseTerrain(gameState) {
     gameState.map.push(row);
   }
   
-  // Add terrain features using cellular automata-like approach
+  // Generate terrain based on selected map type
+  switch(mapType) {
+    case 'archipelago':
+      generateArchipelagoMap(gameState);
+      break;
+    case 'pangaea':
+      generatePangaeaMap(gameState);
+      break;
+    case 'highlands':
+      generateHighlandsMap(gameState);
+      break;
+    case 'desert':
+      generateDesertMap(gameState);
+      break;
+    default:
+      generateContinentsMap(gameState); // Default map type
+  }
+}
+
+/**
+ * Generate a continents-style map (default)
+ * @param {Object} gameState - The game state
+ */
+function generateContinentsMap(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   
   // Create water bodies
   const waterSeeds = Math.floor(mapSize / 5);
@@ -41,7 +70,7 @@ function createBaseTerrain(gameState) {
     const x = Math.floor(Math.random() * mapSize);
     const y = Math.floor(Math.random() * mapSize);
     const size = 3 + Math.floor(Math.random() * 5);
-    createTerrainFeature(gameState.map, x, y, size, 'water');
+    createTerrainFeature(gameState.map, x, y, size, 'water', mapSize);
   }
   
   // Create mountains
@@ -50,7 +79,7 @@ function createBaseTerrain(gameState) {
     const x = Math.floor(Math.random() * mapSize);
     const y = Math.floor(Math.random() * mapSize);
     const size = 2 + Math.floor(Math.random() * 3);
-    createTerrainFeature(gameState.map, x, y, size, 'mountain');
+    createTerrainFeature(gameState.map, x, y, size, 'mountain', mapSize);
   }
   
   // Create forests
@@ -59,7 +88,7 @@ function createBaseTerrain(gameState) {
     const x = Math.floor(Math.random() * mapSize);
     const y = Math.floor(Math.random() * mapSize);
     const size = 2 + Math.floor(Math.random() * 4);
-    createTerrainFeature(gameState.map, x, y, size, 'forest');
+    createTerrainFeature(gameState.map, x, y, size, 'forest', mapSize);
   }
   
   // Create hills
@@ -68,7 +97,7 @@ function createBaseTerrain(gameState) {
     const x = Math.floor(Math.random() * mapSize);
     const y = Math.floor(Math.random() * mapSize);
     const size = 2 + Math.floor(Math.random() * 3);
-    createTerrainFeature(gameState.map, x, y, size, 'hills');
+    createTerrainFeature(gameState.map, x, y, size, 'hills', mapSize);
   }
   
   // Create desert regions
@@ -77,7 +106,215 @@ function createBaseTerrain(gameState) {
     const x = Math.floor(Math.random() * mapSize);
     const y = Math.floor(Math.random() * mapSize);
     const size = 3 + Math.floor(Math.random() * 4);
-    createTerrainFeature(gameState.map, x, y, size, 'desert');
+    createTerrainFeature(gameState.map, x, y, size, 'desert', mapSize);
+  }
+}
+
+/**
+ * Generate an archipelago map with lots of islands
+ * @param {Object} gameState - The game state
+ */
+function generateArchipelagoMap(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
+  // Fill most of the map with water
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      if (Math.random() < 0.75) { // 75% of the map is water
+        gameState.map[y][x].type = 'water';
+      }
+    }
+  }
+  
+  // Create islands
+  const islandCount = Math.floor(mapSize / 3);
+  for (let i = 0; i < islandCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const islandSize = 2 + Math.floor(Math.random() * 3);
+    
+    // Create land
+    createTerrainFeature(gameState.map, x, y, islandSize, 'plains', mapSize);
+    
+    // Add some forest to each island
+    if (Math.random() > 0.3) {
+      createTerrainFeature(gameState.map, x, y, islandSize / 2, 'forest', mapSize);
+    }
+    
+    // Add some mountains to some islands
+    if (Math.random() > 0.6) {
+      createTerrainFeature(gameState.map, x, y, 1, 'mountain', mapSize);
+    }
+  }
+}
+
+/**
+ * Generate a Pangaea map with one large land mass
+ * @param {Object} gameState - The game state
+ */
+function generatePangaeaMap(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
+  // Start with a water border around the map
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      if (x < 3 || x >= mapSize - 3 || y < 3 || y >= mapSize - 3) {
+        gameState.map[y][x].type = 'water';
+      }
+    }
+  }
+  
+  // Create a central continent
+  const centerX = Math.floor(mapSize / 2);
+  const centerY = Math.floor(mapSize / 2);
+  const continentSize = Math.floor(mapSize * 0.7);
+  
+  createTerrainFeature(gameState.map, centerX, centerY, continentSize, 'plains', mapSize);
+  
+  // Add mountains in a ridge
+  const mountainCount = Math.floor(mapSize / 5);
+  const mountainStartX = centerX - Math.floor(mapSize / 6);
+  const mountainStartY = centerY - Math.floor(mapSize / 6);
+  
+  for (let i = 0; i < mountainCount; i++) {
+    const offsetX = Math.floor(Math.random() * (mapSize / 3));
+    const offsetY = Math.floor(Math.random() * (mapSize / 3));
+    const x = mountainStartX + offsetX;
+    const y = mountainStartY + offsetY;
+    
+    createTerrainFeature(gameState.map, x, y, 2, 'mountain', mapSize);
+  }
+  
+  // Add forests
+  const forestCount = Math.floor(mapSize / 2);
+  for (let i = 0; i < forestCount; i++) {
+    const offsetX = Math.floor(Math.random() * mapSize) - Math.floor(mapSize / 2);
+    const offsetY = Math.floor(Math.random() * mapSize) - Math.floor(mapSize / 2);
+    const x = centerX + offsetX;
+    const y = centerY + offsetY;
+    
+    if (x >= 0 && x < mapSize && y >= 0 && y < mapSize && gameState.map[y][x].type === 'plains') {
+      createTerrainFeature(gameState.map, x, y, 2 + Math.floor(Math.random() * 3), 'forest', mapSize);
+    }
+  }
+  
+  // Add some hills
+  const hillsCount = Math.floor(mapSize / 3);
+  for (let i = 0; i < hillsCount; i++) {
+    const offsetX = Math.floor(Math.random() * mapSize) - Math.floor(mapSize / 2);
+    const offsetY = Math.floor(Math.random() * mapSize) - Math.floor(mapSize / 2);
+    const x = centerX + offsetX;
+    const y = centerY + offsetY;
+    
+    if (x >= 0 && x < mapSize && y >= 0 && y < mapSize && gameState.map[y][x].type === 'plains') {
+      createTerrainFeature(gameState.map, x, y, 2, 'hills', mapSize);
+    }
+  }
+}
+
+/**
+ * Generate a highlands map with lots of mountains and hills
+ * @param {Object} gameState - The game state
+ */
+function generateHighlandsMap(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
+  // Create many mountain ranges
+  const mountainRanges = Math.floor(mapSize / 6);
+  for (let i = 0; i < mountainRanges; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 4 + Math.floor(Math.random() * 4);
+    createTerrainFeature(gameState.map, x, y, size, 'mountain', mapSize);
+  }
+  
+  // Create hills around the mountains
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      if (gameState.map[y][x].type === 'plains') {
+        // Check if there are mountains nearby
+        const surroundingTiles = getSurroundingTiles(gameState.map, x, y, mapSize);
+        const nearbyMountains = surroundingTiles.filter(tile => tile.type === 'mountain').length;
+        
+        if (nearbyMountains > 0 && Math.random() < 0.7) {
+          gameState.map[y][x].type = 'hills';
+        }
+      }
+    }
+  }
+  
+  // Add some water bodies (lakes)
+  const lakeCount = Math.floor(mapSize / 8);
+  for (let i = 0; i < lakeCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 1 + Math.floor(Math.random() * 2);
+    createTerrainFeature(gameState.map, x, y, size, 'water', mapSize);
+  }
+  
+  // Add some forests at lower elevations
+  const forestCount = Math.floor(mapSize / 4);
+  for (let i = 0; i < forestCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    
+    if (gameState.map[y][x].type === 'plains') {
+      const size = 2 + Math.floor(Math.random() * 3);
+      createTerrainFeature(gameState.map, x, y, size, 'forest', mapSize);
+    }
+  }
+}
+
+/**
+ * Generate a desert world with sparse resources
+ * @param {Object} gameState - The game state
+ */
+function generateDesertMap(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
+  // Set most of the map to desert
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      gameState.map[y][x].type = 'desert';
+    }
+  }
+  
+  // Create oases (small water bodies)
+  const oasisCount = Math.floor(mapSize / 10);
+  for (let i = 0; i < oasisCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 1;
+    createTerrainFeature(gameState.map, x, y, size, 'water', mapSize);
+    
+    // Add plains around oases
+    createTerrainFeature(gameState.map, x, y, 2, 'plains', mapSize);
+  }
+  
+  // Add scattered plains for some variety
+  const plainsPatches = Math.floor(mapSize / 6);
+  for (let i = 0; i < plainsPatches; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 1 + Math.floor(Math.random() * 2);
+    createTerrainFeature(gameState.map, x, y, size, 'plains', mapSize);
+  }
+  
+  // Add a few hills and mountains
+  const hillsCount = Math.floor(mapSize / 8);
+  for (let i = 0; i < hillsCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 1 + Math.floor(Math.random() * 2);
+    createTerrainFeature(gameState.map, x, y, size, 'hills', mapSize);
+  }
+  
+  const mountainCount = Math.floor(mapSize / 12);
+  for (let i = 0; i < mountainCount; i++) {
+    const x = Math.floor(Math.random() * mapSize);
+    const y = Math.floor(Math.random() * mapSize);
+    const size = 1;
+    createTerrainFeature(gameState.map, x, y, size, 'mountain', mapSize);
   }
 }
 
@@ -88,8 +325,9 @@ function createBaseTerrain(gameState) {
  * @param {Number} centerY - Y coordinate of the feature center
  * @param {Number} size - Size of the feature
  * @param {String} terrainType - Type of terrain to create
+ * @param {Number} mapSize - Size of the map
  */
-function createTerrainFeature(map, centerX, centerY, size, terrainType) {
+function createTerrainFeature(map, centerX, centerY, size, terrainType, mapSize) {
   // Start with the center tile
   if (centerX >= 0 && centerX < mapSize && centerY >= 0 && centerY < mapSize) {
     map[centerY][centerX].type = terrainType;
@@ -123,6 +361,7 @@ function createTerrainFeature(map, centerX, centerY, size, terrainType) {
  */
 function structureTerrain(gameState) {
   const map = gameState.map;
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   
   // Create transition zones between terrain types
   for (let y = 0; y < mapSize; y++) {
@@ -130,7 +369,7 @@ function structureTerrain(gameState) {
       const tile = map[y][x];
       
       // Check surrounding tiles
-      const neighbors = getSurroundingTiles(map, x, y);
+      const neighbors = getSurroundingTiles(map, x, y, mapSize);
       const neighborTypes = neighbors.map(t => t.type);
       
       // Create hills as transition between plains and mountains
@@ -156,22 +395,52 @@ function structureTerrain(gameState) {
  */
 function addRoads(gameState) {
   const map = gameState.map;
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const activePlayerCount = getActivePlayerCount(gameState);
   
-  // For now, just add a basic road connecting player starting locations
-  const player1X = 3;
-  const player1Y = 3;
-  const player2X = mapSize - 4;
-  const player2Y = mapSize - 4;
+  // Use starting positions for road connections
+  const startPositions = gameState.startingPositions;
+  if (!startPositions || startPositions.length < 2) return;
   
-  // Simple A* pathfinding to create road
-  const path = findPath(map, player1X, player1Y, player2X, player2Y);
+  // Create roads between starting positions
+  for (let i = 0; i < startPositions.length - 1; i++) {
+    const from = startPositions[i];
+    
+    // Connect to the next position
+    const to = startPositions[i + 1];
+    
+    // Create road between these two positions
+    const path = findPath(map, from.x, from.y, to.x, to.y, mapSize);
+    
+    // Create roads along the path
+    for (const point of path) {
+      // Only place roads on land
+      if (map[point.y][point.x].type !== 'water' && 
+          map[point.y][point.x].type !== 'mountain') {
+        map[point.y][point.x].type = 'road';
+      }
+    }
+  }
   
-  // Create roads along the path
-  for (const point of path) {
-    // Only place roads on land
-    if (map[point.y][point.x].type !== 'water' && 
-        map[point.y][point.x].type !== 'mountain') {
-      map[point.y][point.x].type = 'road';
+  // For more than 2 players, create a central road network connecting all start positions
+  if (activePlayerCount > 2) {
+    // Find center of the map
+    const centerX = Math.floor(mapSize / 2);
+    const centerY = Math.floor(mapSize / 2);
+    
+    // Connect each starting position to the center
+    for (let i = 0; i < startPositions.length; i++) {
+      const pos = startPositions[i];
+      const path = findPath(map, pos.x, pos.y, centerX, centerY, mapSize);
+      
+      // Create roads along the path
+      for (const point of path) {
+        // Only place roads on land
+        if (map[point.y][point.x].type !== 'water' && 
+            map[point.y][point.x].type !== 'mountain') {
+          map[point.y][point.x].type = 'road';
+        }
+      }
     }
   }
 }
@@ -183,9 +452,10 @@ function addRoads(gameState) {
  * @param {Number} startY - Starting Y coordinate
  * @param {Number} endX - Ending X coordinate
  * @param {Number} endY - Ending Y coordinate
+ * @param {Number} mapSize - Size of the map
  * @returns {Array} - Array of points forming the path
  */
-function findPath(map, startX, startY, endX, endY) {
+function findPath(map, startX, startY, endX, endY, mapSize) {
   // Simplified path for now - just a direct line
   const path = [];
   const dx = endX - startX;
@@ -209,9 +479,10 @@ function findPath(map, startX, startY, endX, endY) {
  * @param {Array} map - The game map
  * @param {Number} x - X coordinate
  * @param {Number} y - Y coordinate
+ * @param {Number} mapSize - Size of the map
  * @returns {Array} - Array of surrounding tiles
  */
-function getSurroundingTiles(map, x, y) {
+function getSurroundingTiles(map, x, y, mapSize) {
   const surrounding = [];
   const directions = [
     [-1, -1], [0, -1], [1, -1],
@@ -237,40 +508,99 @@ function getSurroundingTiles(map, x, y) {
  */
 function placeStartingPositions(gameState) {
   const map = gameState.map;
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const activePlayerCount = getActivePlayerCount(gameState);
   
-  // Define starting locations
-  const player1X = 3;
-  const player1Y = 3;
-  const player2X = mapSize - 4;
-  const player2Y = mapSize - 4;
+  // Initialize starting positions array
+  gameState.startingPositions = [];
   
-  // Ensure starting locations are plains and surroundings are suitable
-  for (let y = player1Y - 3; y <= player1Y + 3; y++) {
-    for (let x = player1X - 3; x <= player1X + 3; x++) {
-      if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
-        // Core starting area is always plains
-        if (Math.abs(x - player1X) <= 1 && Math.abs(y - player1Y) <= 1) {
-          map[y][x].type = 'plains';
-        }
-        // No mountains or water too close to start
-        else if (Math.abs(x - player1X) <= 2 && Math.abs(y - player1Y) <= 2) {
-          if (map[y][x].type === 'mountain' || map[y][x].type === 'water') {
-            map[y][x].type = 'plains';
-          }
-        }
-      }
-    }
+  // Calculate positions based on number of players
+  const startingPositions = calculateStartingPositions(mapSize, activePlayerCount);
+  
+  // Store starting positions in gameState for reference
+  gameState.startingPositions = startingPositions;
+  
+  // Make sure all starting areas are suitable
+  for (const position of startingPositions) {
+    ensureSuitableStartingArea(map, position.x, position.y, mapSize);
+  }
+}
+
+/**
+ * Calculate evenly distributed starting positions for the given number of players
+ * @param {Number} mapSize - Size of the map
+ * @param {Number} playerCount - Number of active players
+ * @returns {Array} - Array of position objects
+ */
+function calculateStartingPositions(mapSize, playerCount) {
+  const positions = [];
+  const margin = Math.max(3, Math.floor(mapSize * 0.1));
+  
+  if (playerCount <= 2) {
+    // For 1-2 players, place in opposite corners
+    positions.push({ x: margin, y: margin }); // Player 1 (human)
+    positions.push({ x: mapSize - margin - 1, y: mapSize - margin - 1 }); // Player 2
+  }
+  else if (playerCount === 3) {
+    // For 3 players, place in triangle formation
+    positions.push({ x: margin, y: margin }); // Player 1 (human)
+    positions.push({ x: mapSize - margin - 1, y: margin }); // Player 2
+    positions.push({ x: Math.floor(mapSize / 2), y: mapSize - margin - 1 }); // Player 3
+  }
+  else if (playerCount === 4) {
+    // For 4 players, place in all four corners
+    positions.push({ x: margin, y: margin }); // Player 1 (human)
+    positions.push({ x: mapSize - margin - 1, y: margin }); // Player 2
+    positions.push({ x: margin, y: mapSize - margin - 1 }); // Player 3
+    positions.push({ x: mapSize - margin - 1, y: mapSize - margin - 1 }); // Player 4
+  }
+  else if (playerCount === 5) {
+    // For 5 players, place in pentagon formation
+    const centerX = Math.floor(mapSize / 2);
+    const centerY = Math.floor(mapSize / 2);
+    const radius = Math.floor(mapSize * 0.4);
+    
+    // Calculate positions in a circle
+    positions.push({ x: margin, y: margin }); // Player 1 (human) at top-left
+    positions.push({ x: mapSize - margin - 1, y: margin }); // Player 2 at top-right
+    positions.push({ x: margin, y: mapSize - margin - 1 }); // Player 3 at bottom-left
+    positions.push({ x: mapSize - margin - 1, y: mapSize - margin - 1 }); // Player 4 at bottom-right
+    positions.push({ x: centerX, y: centerY }); // Player 5 at center
+  }
+  else {
+    // For 6 players, place in hexagon formation
+    const centerX = Math.floor(mapSize / 2);
+    const centerY = Math.floor(mapSize / 2);
+    const radius = Math.floor(mapSize * 0.4);
+    
+    positions.push({ x: margin, y: margin }); // Player 1 (human) at top-left
+    positions.push({ x: mapSize - margin - 1, y: margin }); // Player 2 at top-right
+    positions.push({ x: margin, y: centerY }); // Player 3 at middle-left
+    positions.push({ x: mapSize - margin - 1, y: centerY }); // Player 4 at middle-right
+    positions.push({ x: margin, y: mapSize - margin - 1 }); // Player 5 at bottom-left
+    positions.push({ x: mapSize - margin - 1, y: mapSize - margin - 1 }); // Player 6 at bottom-right
   }
   
-  for (let y = player2Y - 3; y <= player2Y + 3; y++) {
-    for (let x = player2X - 3; x <= player2X + 3; x++) {
+  return positions;
+}
+
+/**
+ * Ensure the starting area is suitable (plains, no water/mountains)
+ * @param {Array} map - The game map
+ * @param {Number} centerX - X coordinate of starting position
+ * @param {Number} centerY - Y coordinate of starting position
+ * @param {Number} mapSize - Size of the map
+ */
+function ensureSuitableStartingArea(map, centerX, centerY, mapSize) {
+  for (let y = centerY - 3; y <= centerY + 3; y++) {
+    for (let x = centerX - 3; x <= centerX + 3; x++) {
       if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
         // Core starting area is always plains
-        if (Math.abs(x - player2X) <= 1 && Math.abs(y - player2Y) <= 1) {
+        if (Math.abs(x - centerX) <= 1 && Math.abs(y - centerY) <= 1) {
           map[y][x].type = 'plains';
         }
         // No mountains or water too close to start
-        else if (Math.abs(x - player2X) <= 2 && Math.abs(y - player2Y) <= 2) {
+        else if (Math.abs(x - centerX) <= 2 && Math.abs(y - centerY) <= 2) {
           if (map[y][x].type === 'mountain' || map[y][x].type === 'water') {
             map[y][x].type = 'plains';
           }
@@ -281,65 +611,80 @@ function placeStartingPositions(gameState) {
 }
 
 /**
+ * Get the number of active players in the game
+ * @param {Object} gameState - The game state
+ * @returns {Number} - Number of active players
+ */
+function getActivePlayerCount(gameState) {
+  // Count the number of active players
+  let count = 1; // Human player is always active
+  
+  // Add AI players if specified
+  if (gameState.aiPlayerCount) {
+    count += gameState.aiPlayerCount;
+  }
+  
+  return Math.min(count, gameState.maxPlayers || 6);
+}
+
+/**
  * Complete map generation by placing HQs, units and revealing areas
  * @param {Object} gameState - The game state
  * @returns {Object} - Updated game state
  */
 function finalizeMap(gameState) {
-  // Define starting locations
-  const player1X = 3;
-  const player1Y = 3;
-  const player2X = mapSize - 4;
-  const player2Y = mapSize - 4;
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const activePlayerCount = getActivePlayerCount(gameState);
   
-  // Place HQs
-  gameState.map[player1Y][player1X].building = { type: 'hq', owner: 1 };
-  gameState.map[player2Y][player2X].building = { type: 'hq', owner: 2 };
+  // Use stored starting positions or default fallback positions
+  const startPositions = gameState.startingPositions || [
+    { x: 3, y: 3 },
+    { x: mapSize - 4, y: mapSize - 4 }
+  ];
   
-  // Add buildings to player lists
-  gameState.players[0].buildings.push({ type: 'hq', x: player1X, y: player1Y });
-  gameState.players[1].buildings.push({ type: 'hq', x: player2X, y: player2Y });
-  
-  // Add starting units (1 Clubman) for each player with properly initialized movement
-  const player1Unit = { 
-    type: 'clubman', 
-    owner: 1, 
-    x: player1X, 
-    y: player1Y + 1, 
-    health: 100,
-    canMove: true,
-    remainingMP: unitTypes['clubman'].move,
-    isEmbarked: false
-  };
-  
-  const player2Unit = { 
-    type: 'clubman', 
-    owner: 2, 
-    x: player2X, 
-    y: player2Y - 1, 
-    health: 100,
-    canMove: true,
-    remainingMP: unitTypes['clubman'].move,
-    isEmbarked: false
-  };
-  
-  // Store starting positions for cavalry charge calculations
-  player1Unit.startingX = player1Unit.x;
-  player1Unit.startingY = player1Unit.y;
-  player2Unit.startingX = player2Unit.x;
-  player2Unit.startingY = player2Unit.y;
-  
-  // Add units to map
-  gameState.map[player1Y + 1][player1X].unit = player1Unit;
-  gameState.map[player2Y - 1][player2X].unit = player2Unit;
-  
-  // Add units to player lists
-  gameState.players[0].units.push(player1Unit);
-  gameState.players[1].units.push(player2Unit);
-  
-  // Reveal areas around HQs
-  revealArea(gameState, player1X, player1Y, 4, 0);
-  revealArea(gameState, player2X, player2Y, 4, 1);
+  // Setup each active player
+  for (let i = 0; i < activePlayerCount && i < gameState.players.length; i++) {
+    if (i >= startPositions.length) break; // Safety check for positions
+    
+    const player = gameState.players[i];
+    const pos = startPositions[i];
+    
+    // Skip inactive players
+    if (player.inactive) continue;
+    
+    // Place HQ for this player
+    gameState.map[pos.y][pos.x].building = { type: 'hq', owner: player.id };
+    player.buildings.push({ type: 'hq', x: pos.x, y: pos.y });
+    
+    // Determine unit position (alternates between south and north of HQ based on player index)
+    let unitX = pos.x;
+    let unitY = i % 2 === 0 ? pos.y + 1 : pos.y - 1;
+    
+    // Make sure unit position is within map bounds
+    if (unitY < 0) unitY = 0;
+    if (unitY >= mapSize) unitY = mapSize - 1;
+    
+    // Create starting unit
+    const newUnit = { 
+      type: 'clubman', 
+      owner: player.id, 
+      x: unitX, 
+      y: unitY, 
+      health: 100,
+      canMove: true,
+      remainingMP: unitTypes['clubman'].move,
+      isEmbarked: false,
+      startingX: unitX,  // Store starting position for cavalry charge calculations
+      startingY: unitY
+    };
+    
+    // Add unit to map and player
+    gameState.map[unitY][unitX].unit = newUnit;
+    player.units.push(newUnit);
+    
+    // Reveal area around HQ for this player
+    revealArea(gameState, pos.x, pos.y, 4, i);
+  }
 
   return gameState;
 }
@@ -379,18 +724,33 @@ export function generateMap(gameState) {
 function createResourceHotspots(gameState) {
   const map = gameState.map;
   const hotspots = [];
-  const maxHotspots = resourceHotspots.maxHotspots;
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const resourceDensity = gameState.resourceDensity || 'standard';
+  
+  // Adjust number of hotspots based on resource density setting
+  let maxHotspots = resourceHotspots.maxHotspots;
+  switch(resourceDensity) {
+    case 'sparse':
+      maxHotspots = Math.max(2, Math.floor(resourceHotspots.maxHotspots * 0.6));
+      break;
+    case 'abundant':
+      maxHotspots = Math.min(12, Math.floor(resourceHotspots.maxHotspots * 1.5));
+      break;
+    case 'rich':
+      maxHotspots = Math.min(15, Math.floor(resourceHotspots.maxHotspots * 2));
+      break;
+  }
+  
   const minDistance = resourceHotspots.minDistance;
   const radius = resourceHotspots.radius;
   
   // Create strategic resource hotspots with increased resource density
-  // These will be contested areas that players will want to control
   for (let i = 0; i < maxHotspots; i++) {
     let attempts = 0;
     let validSpot = false;
     let x, y;
     
-    // Try to find a suitable location away from other hotspots
+    // Try to find a suitable location
     while (!validSpot && attempts < 50) {
       attempts++;
       x = Math.floor(Math.random() * mapSize);
@@ -406,9 +766,11 @@ function createResourceHotspots(gameState) {
         }
       }
       
-      // Ensure not too close to starting positions
-      const distToStart1 = Math.sqrt(Math.pow(x - 3, 2) + Math.pow(y - 3, 2));
-      const distToStart2 = Math.sqrt(Math.pow(x - (mapSize - 4), 2) + Math.pow(y - (mapSize - 4), 2));
+      // Ensure not too close to starting positions (these positions will be adjusted based on map size)
+      const startPosMargin = Math.max(3, Math.floor(mapSize * 0.1));
+      const distToStart1 = Math.sqrt(Math.pow(x - startPosMargin, 2) + Math.pow(y - startPosMargin, 2));
+      const distToStart2 = Math.sqrt(Math.pow(x - (mapSize - startPosMargin), 2) + Math.pow(y - (mapSize - startPosMargin), 2));
+      
       if (distToStart1 < minDistance / 2 || distToStart2 < minDistance / 2) {
         validSpot = false;
       }
@@ -455,6 +817,8 @@ function selectHotspotType() {
  * @param {Object} gameState - The game state
  */
 export function addResourceNodes(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
   // Clear existing resource nodes first
   for (let y = 0; y < mapSize; y++) {
     for (let x = 0; x < mapSize; x++) {
@@ -517,7 +881,8 @@ function placeHotspotResources(gameState, availableResources) {
         const y = hotspot.y + offsetY;
         
         // Check if coordinates are valid
-        if (x >= 0 && x < mapSize && y >= 0 && y < mapSize) {
+        if (x >= 0 && x < (gameState.mapSize || DEFAULT_MAP_SIZE) && 
+            y >= 0 && y < (gameState.mapSize || DEFAULT_MAP_SIZE)) {
           const tile = gameState.map[y][x];
           const resourceInfo = resourceTileTypes[resourceType];
           
@@ -525,7 +890,7 @@ function placeHotspotResources(gameState, availableResources) {
           if (resourceInfo && resourceInfo.terrainRequirements) {
             if (resourceInfo.terrainRequirements.includes(tile.type)) {
               // Resource quality is usually better in hotspots
-              const quality = determineResourceQuality(true);
+              const quality = determineResourceQuality(true, gameState.resourceDensity);
               const maxAmount = resourceInfo.qualityLevels[quality].maxAmount;
               
               tile.type = resourceType;
@@ -546,7 +911,25 @@ function placeHotspotResources(gameState, availableResources) {
  * @param {Array} availableResources - Resources available in the current age
  */
 function placeScatteredResources(gameState, availableResources) {
-  const nodesToPlace = 15 + Math.floor(availableResources.length * 2); // More resources as ages advance
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const resourceDensity = gameState.resourceDensity || 'standard';
+  
+  // Adjust number of resources based on density setting
+  let baseNodeCount = 15 + Math.floor(availableResources.length * 2);
+  
+  switch(resourceDensity) {
+    case 'sparse':
+      baseNodeCount = Math.floor(baseNodeCount * 0.6);
+      break;
+    case 'abundant':
+      baseNodeCount = Math.floor(baseNodeCount * 1.5);
+      break;
+    case 'rich':
+      baseNodeCount = Math.floor(baseNodeCount * 2.5);
+      break;
+  }
+  
+  const nodesToPlace = baseNodeCount;
   
   for (let i = 0; i < nodesToPlace; i++) {
     const resourceType = availableResources[Math.floor(Math.random() * availableResources.length)];
@@ -569,12 +952,18 @@ function placeScatteredResources(gameState, availableResources) {
       // Check if tile is suitable for this resource
       if (resourceInfo && resourceInfo.terrainRequirements) {
         if (resourceInfo.terrainRequirements.includes(tile.type)) {
-          // Determine resource quality
-          const quality = determineResourceQuality(false);
+          // Determine resource quality based on resource density setting
+          const quality = determineResourceQuality(false, resourceDensity);
           const maxAmount = resourceInfo.qualityLevels[quality].maxAmount;
           
+          // Adjust resource amount based on density
+          let multiplier = 0.6;
+          if (resourceDensity === 'abundant') multiplier = 0.7;
+          if (resourceDensity === 'rich') multiplier = 0.8;
+          
           tile.type = resourceType;
-          tile.resourceAmount = Math.floor(maxAmount * 0.6) + Math.floor(Math.random() * (maxAmount * 0.4));
+          tile.resourceAmount = Math.floor(maxAmount * multiplier) + 
+                               Math.floor(Math.random() * (maxAmount * (1 - multiplier)));
           tile.resourceQuality = quality;
           placed = true;
         }
@@ -586,26 +975,55 @@ function placeScatteredResources(gameState, availableResources) {
 /**
  * Determine the quality level of a resource deposit
  * @param {Boolean} inHotspot - Whether the resource is in a hotspot
+ * @param {String} resourceDensity - Resource density setting
  * @returns {String} - Quality level: 'poor', 'standard', or 'rich'
  */
-function determineResourceQuality(inHotspot) {
+function determineResourceQuality(inHotspot, resourceDensity = 'standard') {
   const r = Math.random();
   
   if (inHotspot) {
     // Resources in hotspots are more likely to be rich
-    if (r < 0.4) return 'rich';
-    if (r < 0.8) return 'standard';
-    return 'poor';
+    switch(resourceDensity) {
+      case 'sparse':
+        if (r < 0.3) return 'rich';
+        if (r < 0.7) return 'standard';
+        return 'poor';
+      case 'rich':
+        if (r < 0.6) return 'rich';
+        if (r < 0.9) return 'standard';
+        return 'poor';
+      default: // standard or abundant
+        if (r < 0.4) return 'rich';
+        if (r < 0.8) return 'standard';
+        return 'poor';
+    }
   } else {
     // Normal distribution of resource quality
-    if (r < 0.2) return 'rich';
-    if (r < 0.7) return 'standard';
-    return 'poor';
+    switch(resourceDensity) {
+      case 'sparse':
+        if (r < 0.1) return 'rich';
+        if (r < 0.5) return 'standard';
+        return 'poor';
+      case 'abundant':
+        if (r < 0.3) return 'rich';
+        if (r < 0.8) return 'standard';
+        return 'poor';
+      case 'rich':
+        if (r < 0.5) return 'rich';
+        if (r < 0.9) return 'standard';
+        return 'poor';
+      default: // standard
+        if (r < 0.2) return 'rich';
+        if (r < 0.7) return 'standard';
+        return 'poor';
+    }
   }
 }
 
 // Reveal area around a point
 export function revealArea(gameState, centerX, centerY, radius, playerIndex) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  
   for (let y = centerY - radius; y <= centerY + radius; y++) {
     for (let x = centerX - radius; x <= centerX + radius; x++) {
       if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
