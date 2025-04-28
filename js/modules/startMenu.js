@@ -10,40 +10,66 @@ import { toggleFogOfWar, setAIDifficulty } from './gameEvents.js';
  * @returns {Object} - Updated game state
  */
 export function startNewGame(gameState, settings) {
-    // Apply settings to gameState
-    gameState.mapSize = settings.mapSize;
-    gameState.mapType = settings.mapType;
-    gameState.gameStarted = true;
-    gameState.fogOfWarEnabled = settings.fogOfWar;
-    gameState.aiDifficulty = settings.aiDifficulty;
-    gameState.resourceDensity = settings.resourceDensity;
-    gameState.aiPlayerCount = settings.aiPlayerCount || 1; // Default to 1 if not specified
+    console.log('Starting new game with settings:', settings);
     
-    // Set AI players active or inactive based on selected count
-    for (let i = 1; i < gameState.players.length; i++) {
-        // Player index 0 is human player, indices 1+ are AI players
-        if (i <= gameState.aiPlayerCount) {
-            // Activate this AI player
-            gameState.players[i].inactive = false;
-        } else {
-            // Deactivate this AI player
-            gameState.players[i].inactive = true;
+    try {
+        // Apply settings to gameState
+        gameState.mapSize = settings.mapSize;
+        gameState.mapType = settings.mapType;
+        gameState.gameStarted = true;
+        gameState.fogOfWarEnabled = settings.fogOfWar;
+        gameState.aiDifficulty = settings.aiDifficulty;
+        gameState.resourceDensity = settings.resourceDensity;
+        gameState.aiPlayerCount = settings.aiPlayerCount || 1; // Default to 1 if not specified
+        
+        // Set AI players active or inactive based on selected count
+        for (let i = 1; i < gameState.players.length; i++) {
+            // Player index 0 is human player, indices 1+ are AI players
+            if (i <= gameState.aiPlayerCount) {
+                // Activate this AI player
+                gameState.players[i].inactive = false;
+            } else {
+                // Deactivate this AI player
+                gameState.players[i].inactive = true;
+            }
         }
+        
+        console.log('Generating map...');
+        
+        // Generate map with selected settings
+        try {
+            gameState = generateMap(gameState);
+            console.log('Map generation complete');
+        } catch (mapError) {
+            console.error('Error during map generation:', mapError);
+            alert('There was an error generating the map. Please try again.');
+            return gameState; // Return without hiding start menu
+        }
+        
+        // Find and hide the start menu overlay
+        const startMenuOverlay = document.getElementById('startMenuOverlay');
+        if (startMenuOverlay) {
+            startMenuOverlay.style.display = 'none';
+            console.log('Start menu overlay hidden');
+        } else {
+            console.error('Start menu overlay element not found');
+        }
+        
+        // If game container exists, make it visible
+        const gameContainer = document.getElementById('gameContainer');
+        if (gameContainer) {
+            gameContainer.style.display = 'flex';
+            console.log('Game container now visible');
+        } else {
+            console.error('Game container element not found');
+        }
+        
+        return gameState;
+    } catch (error) {
+        console.error('Critical error in startNewGame:', error);
+        alert('There was an error starting the game. Please try again.');
+        return gameState;
     }
-    
-    // Generate map with selected settings
-    gameState = generateMap(gameState);
-    
-    // Hide start menu overlay and show game container
-    document.getElementById('startMenuOverlay').style.display = 'none';
-    
-    // If game container exists, make it visible
-    const gameContainer = document.getElementById('gameContainer');
-    if (gameContainer) {
-        gameContainer.style.display = 'flex';
-    }
-    
-    return gameState;
 }
 
 /**
@@ -51,16 +77,20 @@ export function startNewGame(gameState, settings) {
  * @param {Function} startGameCallback - Callback to initialize the game
  */
 export function initStartMenu(startGameCallback) {
-    // Create start menu if it doesn't exist yet
-    if (!document.getElementById('startMenuOverlay')) {
-        createStartMenuUI();
-    } else {
-        // If start menu overlay already exists, ensure it's attached to the document
-        const existingOverlay = document.getElementById('startMenuOverlay');
-        if (!document.body.contains(existingOverlay)) {
-            document.body.appendChild(existingOverlay);
+    console.log('Initializing start menu');
+    
+    // First, remove any existing overlay to prevent duplicates
+    const existingOverlay = document.getElementById('startMenuOverlay');
+    if (existingOverlay) {
+        try {
+            document.body.removeChild(existingOverlay);
+        } catch (e) {
+            console.error('Error removing existing overlay:', e);
         }
     }
+    
+    // Create a fresh start menu UI
+    createStartMenuUI();
     
     // Make sure the game container is hidden when showing the start menu
     const gameContainer = document.getElementById('gameContainer');
@@ -68,8 +98,14 @@ export function initStartMenu(startGameCallback) {
         gameContainer.style.display = 'none';
     }
     
-    // Show the start menu
-    document.getElementById('startMenuOverlay').style.display = 'flex';
+    // Show the start menu explicitly
+    const overlay = document.getElementById('startMenuOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        console.log('Start menu overlay is visible');
+    } else {
+        console.error('Failed to create start menu overlay');
+    }
     
     // Setup event handlers
     setupStartMenuHandlers(startGameCallback);

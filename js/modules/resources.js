@@ -9,7 +9,18 @@ export const resourceIcons = {
   oil: '🛢️',
   sulfur: '⚗️',
   techPoints: '🔬',
-  manpower: '👥'
+  manpower: '👥',
+  offshoreOil: '🌊',
+  salt: '🧂',
+  silica: '🔍',
+  uranium: '☢️',
+  diamonds: '💎',
+  geothermal: '♨️',
+  peat: '🟫',
+  rubber: '🌳',
+  grapes: '🍇',
+  seaSalt: '🧂',
+  pearls: '🦪'
 };
 
 // Resource categories for organization
@@ -134,7 +145,8 @@ export const resourceTileTypes = {
       rich: { color: '#66BB6A', multiplier: 1.5, maxAmount: 100 }
     },
     terrainRequirements: ['plains', 'forest'],
-    buildingRequired: true
+    buildingRequired: true,
+    buildingType: 'hunting_lodge'
   },
   wood: {
     color: '#33691E',
@@ -146,7 +158,8 @@ export const resourceTileTypes = {
       rich: { color: '#2E7D32', multiplier: 1.5, maxAmount: 100 }
     },
     terrainRequirements: ['forest'],
-    buildingRequired: true
+    buildingRequired: true,
+    buildingType: 'logging_camp'
   },
   stone: {
     color: '#9E9E9E',
@@ -227,6 +240,154 @@ export const resourceTileTypes = {
     terrainRequirements: ['desert', 'mountain'],
     buildingRequired: true,
     minAge: 'Industrial Age',
+    rarity: 'rare'
+  },
+  offshoreOil: {
+    color: '#1A237E',
+    moveCost: 2,
+    description: 'Offshore oil deposit',
+    qualityLevels: {
+      poor: { color: '#3949AB', multiplier: 0.7, maxAmount: 25 },
+      standard: { color: '#1A237E', multiplier: 1.0, maxAmount: 50 },
+      rich: { color: '#0D47A1', multiplier: 1.5, maxAmount: 80 }
+    },
+    terrainRequirements: ['water'],
+    buildingRequired: true,
+    minAge: 'Industrial Age',
+    rarity: 'uncommon'
+  },
+  salt: {
+    color: '#E0E0E0',
+    moveCost: 1,
+    description: 'Salt flats',
+    qualityLevels: {
+      poor: { color: '#F5F5F5', multiplier: 0.7, maxAmount: 20 },
+      standard: { color: '#E0E0E0', multiplier: 1.0, maxAmount: 40 },
+      rich: { color: '#BDBDBD', multiplier: 1.5, maxAmount: 60 }
+    },
+    terrainRequirements: ['desert', 'water'],
+    buildingRequired: true,
+    minAge: 'Bronze Age'
+  },
+  silica: {
+    color: '#B2EBF2',
+    moveCost: 1,
+    description: 'Quartz vein',
+    qualityLevels: {
+      poor: { color: '#E0F7FA', multiplier: 0.7, maxAmount: 20 },
+      standard: { color: '#B2EBF2', multiplier: 1.0, maxAmount: 40 },
+      rich: { color: '#80DEEA', multiplier: 1.5, maxAmount: 60 }
+    },
+    terrainRequirements: ['hills'],
+    buildingRequired: true,
+    minAge: 'Medieval Age'
+  },
+  uranium: {
+    color: '#4CAF50',
+    moveCost: 1,
+    description: 'Uranium deposit',
+    qualityLevels: {
+      poor: { color: '#81C784', multiplier: 0.7, maxAmount: 15 },
+      standard: { color: '#4CAF50', multiplier: 1.0, maxAmount: 30 },
+      rich: { color: '#388E3C', multiplier: 1.5, maxAmount: 50 }
+    },
+    terrainRequirements: ['mountain'],
+    buildingRequired: true,
+    minAge: 'Great War Age',
+    rarity: 'rare'
+  },
+  diamonds: {
+    color: '#B39DDB',
+    moveCost: 1,
+    description: 'Diamond deposit',
+    qualityLevels: {
+      poor: { color: '#D1C4E9', multiplier: 0.7, maxAmount: 10 },
+      standard: { color: '#B39DDB', multiplier: 1.0, maxAmount: 25 },
+      rich: { color: '#9575CD', multiplier: 1.5, maxAmount: 40 }
+    },
+    terrainRequirements: ['mountain'],
+    buildingRequired: true,
+    minAge: 'Renaissance Age',
+    rarity: 'rare'
+  },
+  geothermal: {
+    color: '#FF5722',
+    moveCost: 1,
+    description: 'Geothermal vent',
+    qualityLevels: {
+      poor: { color: '#FF8A65', multiplier: 0.7, maxAmount: 20 },
+      standard: { color: '#FF5722', multiplier: 1.0, maxAmount: 40 },
+      rich: { color: '#E64A19', multiplier: 1.5, maxAmount: 60 }
+    },
+    terrainRequirements: ['mountain', 'hills'],
+    buildingRequired: true,
+    minAge: 'Industrial Age',
+    rarity: 'uncommon'
+  },
+  peat: {
+    color: '#795548',
+    moveCost: 2,
+    description: 'Peat bog',
+    qualityLevels: {
+      poor: { color: '#A1887F', multiplier: 0.7, maxAmount: 20 },
+      standard: { color: '#795548', multiplier: 1.0, maxAmount: 40 },
+      rich: { color: '#5D4037', multiplier: 1.5, maxAmount: 60 }
+    },
+    terrainRequirements: ['plains', 'water'],
+    buildingRequired: true,
+    minAge: 'Medieval Age'
+  },
+  rubber: {
+    color: '#33691E',
+    moveCost: 1,
+    description: 'Rubber trees',
+    qualityLevels: {
+      poor: { color: '#558B2F', multiplier: 0.7, maxAmount: 20 },
+      standard: { color: '#33691E', multiplier: 1.0, maxAmount: 40 },
+      rich: { color: '#1B5E20', multiplier: 1.5, maxAmount: 60 }
+    },
+    terrainRequirements: ['forest'],
+    buildingRequired: true,
+    minAge: 'Industrial Age'
+  },
+  grapes: {
+    color: '#8E24AA',
+    moveCost: 1,
+    description: 'Vineyard',
+    qualityLevels: {
+      poor: { color: '#AB47BC', multiplier: 0.7, maxAmount: 15 },
+      standard: { color: '#8E24AA', multiplier: 1.0, maxAmount: 30 },
+      rich: { color: '#6A1B9A', multiplier: 1.5, maxAmount: 50 }
+    },
+    terrainRequirements: ['hills', 'plains'],
+    buildingRequired: true,
+    minAge: 'Medieval Age'
+  },
+  seaSalt: {
+    color: '#B0BEC5',
+    moveCost: 2,
+    description: 'Saltwater marsh',
+    qualityLevels: {
+      poor: { color: '#CFD8DC', multiplier: 0.7, maxAmount: 15 },
+      standard: { color: '#B0BEC5', multiplier: 1.0, maxAmount: 30 },
+      rich: { color: '#90A4AE', multiplier: 1.5, maxAmount: 50 }
+    },
+    terrainRequirements: ['water', 'plains'],
+    buildingRequired: true,
+    minAge: 'Bronze Age'
+  },
+  pearls: {
+    color: '#E1BEE7',
+    moveCost: 2,
+    description: 'Coral reef',
+    qualityLevels: {
+      poor: { color: '#F3E5F5', multiplier: 0.7, maxAmount: 10 },
+      standard: { color: '#E1BEE7', multiplier: 1.0, maxAmount: 25 },
+      rich: { color: '#CE93D8', multiplier: 1.5, maxAmount: 40 }
+    },
+    terrainRequirements: ['water'],
+    buildingRequired: true,
+    minAge: 'Medieval Age',
     rarity: 'rare'
   }
 };

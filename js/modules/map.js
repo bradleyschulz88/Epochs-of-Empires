@@ -705,9 +705,6 @@ export function generateMap(gameState) {
   // Place starting positions and ensure they're suitable
   placeStartingPositions(gameState);
   
-  // Add roads
-  addRoads(gameState);
-  
   // Add resource nodes appropriate for the initial age
   addResourceNodes(gameState);
   

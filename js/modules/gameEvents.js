@@ -3,7 +3,6 @@ import {
   processUnitUpkeep, 
   processResearch, 
   processAgeProgress,
-  processProductionQueues,
   advanceAge,
   updatePopulationCap,
   createNewCity
@@ -202,14 +201,22 @@ export function handleDiplomacy(gameState, action) {
 // Process production queues for the current player
 export function processProductionQueues(gameState) {
   const playerIndex = gameState.currentPlayer - 1;
-  return processProductionQueuesHelper(gameState, playerIndex);
-}
-
-// Helper for processing production queues
-function processProductionQueuesHelper(gameState, playerIndex) {
-  return import('./gameState.js').then(module => {
-    return module.processProductionQueues(gameState, playerIndex);
-  });
+  
+  // First try to use the gameState version if available
+  try {
+    return import('./gameState.js').then(module => {
+      if (module.processProductionQueues) {
+        return module.processProductionQueues(gameState, playerIndex);
+      }
+      return false;
+    }).catch(error => {
+      console.error('Error importing processProductionQueues:', error);
+      return false;
+    });
+  } catch (error) {
+    console.error('Error processing production queues:', error);
+    return false;
+  }
 }
 
 // Process an AI turn

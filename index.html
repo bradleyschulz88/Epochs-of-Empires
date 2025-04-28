@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>War Game</title>
-  <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/building-menu.css">
   <link rel="stylesheet" href="css/start-menu.css">
 </head>
 <body>
@@ -43,8 +44,8 @@
       </div>
       
       <div class="tab-content active" id="actions-tab">
-        <button onclick="endTurn()">End Turn</button>
-        <button onclick="advanceAge()" id="advanceAgeBtn">Advance Age</button>
+        <button onclick="window.endTurn()">End Turn</button>
+        <button onclick="window.advanceAge()" id="advanceAgeBtn">Advance Age</button>
         <div class="progress-container">
           <div class="progress-bar" id="ageProgressBar"></div>
           <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
@@ -64,7 +65,7 @@
         
         <h3>Construct Building</h3>
         <div class="building-category-selector">
-          <select id="buildingCategoryFilter" onchange="filterBuildingsByCategory()">
+          <select id="buildingCategoryFilter" onchange="window.filterBuildingsByCategory()">
             <option value="all">All Buildings</option>
             <option value="resource_node">Resource Buildings</option>
             <option value="production">Production Buildings</option>
@@ -105,7 +106,7 @@
       
       <div class="tab-content" id="research-tab">
         <h3>Research Technology</h3>
-        <div class="tech-tree-toggle" onclick="toggleTechTree()">Show/Hide Tech Tree</div>
+        <div class="tech-tree-toggle" onclick="window.toggleTechTree()">Show/Hide Tech Tree</div>
         <div class="tech-tree" id="techTree"></div>
         <div class="research-buttons" id="researchButtons"></div>
         <div class="progress-container">
@@ -130,7 +131,7 @@
       
       <div class="tab-content" id="diplomacy-tab">
         <h3>Diplomacy Actions</h3>
-        <select id="diplomacyAction" onchange="handleDiplomacy()">
+        <select id="diplomacyAction" onchange="window.handleDiplomacy()">
           <option value="">Select Action</option>
           <option value="ally">Form Alliance</option>
           <option value="trade">Trade Resources</option>
@@ -144,21 +145,21 @@
             <!-- Trade routes will be populated dynamically -->
             <div class="no-trade-routes">No active trade routes</div>
           </div>
-          <button onclick="createTradeRoute()" id="createTradeRouteBtn">Create Trade Route</button>
+          <button onclick="window.createTradeRoute()" id="createTradeRouteBtn">Create Trade Route</button>
         </div>
         
         <h3>Game Settings</h3>
-        <button onclick="openSettings()" class="settings-button">Open Settings</button>
+        <button onclick="window.openSettings()" class="settings-button">Open Settings</button>
         <div class="taxation-control">
           <h4>Tax Rate: <span id="taxRateDisplay">0%</span></h4>
-          <input type="range" id="taxSlider" min="0" max="20" value="0" onchange="adjustTaxRate(this.value)">
+          <input type="range" id="taxSlider" min="0" max="20" value="0" onchange="window.adjustTaxRate(this.value)">
           <p>Higher taxes increase gold but reduce happiness</p>
         </div>
       </div>
       
       <div class="menu-links">
-        <button onclick="startNewGameFromUI()">New Game</button>
-        <a href="#" onclick="toggleKeyboardShortcuts(); return false;">Keyboard Shortcuts</a>
+        <button onclick="window.startNewGameFromUI()">New Game</button>
+        <a href="#" onclick="window.toggleKeyboardShortcuts(); return false;">Keyboard Shortcuts</a>
       </div>
     </div>
   </div>

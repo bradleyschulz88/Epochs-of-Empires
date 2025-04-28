@@ -322,6 +322,277 @@ export const buildingTypes = {
     adjacentBonus: {type: "forest", resource: "wood", amount: 5},
     qualityBonus: true, // Benefits from surrounding forest quality
     buildTime: 4
+  },
+  // New resource buildings organized by age
+  // First Modern/Future Age entry will be removed
+  // Stone Age Buildings
+  hunting_lodge: {
+    category: "resource_node",
+    defense: 3,
+    vision: 2,
+    production: { food: 15 },
+    cost: { wood: 30 },
+    description: "Harvests food from wildlife in hunting grounds.",
+    age: "Stone Age",
+    terrainRequirement: ["plains", "forest"],
+    resourceType: "food",
+    qualityBonus: false,
+    buildTime: 3,
+    techRequired: "Hunting Techniques"
+  },
+  
+  // Bronze Age Buildings
+  fishing_dock: {
+    category: "resource_node",
+    defense: 3,
+    vision: 2,
+    production: { food: 20 },
+    cost: { wood: 35, stone: 10 },
+    description: "Harvests fish from coastal waters for food.",
+    age: "Bronze Age",
+    terrainRequirement: ["water"],
+    resourceType: "fish",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Bronze Shipbuilding"
+  },
+  saltworks: {
+    category: "resource_node",
+    defense: 2,
+    vision: 1,
+    production: { salt: 15 },
+    cost: { wood: 20, stone: 15 },
+    description: "Extracts salt from salt flats or coastal regions.",
+    age: "Iron Age",
+    terrainRequirement: ["desert", "water"],
+    resourceType: "salt",
+    qualityBonus: true,
+    buildTime: 3,
+    techRequired: "Salt Extraction"
+  },
+  brickworks: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { bricks: 15 },
+    cost: { wood: 30, stone: 15 },
+    description: "Produces bricks from clay deposits for construction.",
+    age: "Bronze Age",
+    terrainRequirement: ["plains", "water"],
+    resourceType: "clay",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Kiln Technology"
+  },
+  winery: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { grapes: 15, gold: 5 },
+    cost: { wood: 35, stone: 25 },
+    description: "Produces wine from vineyard grapes, providing luxury goods for trade.",
+    age: "Bronze Age",
+    terrainRequirement: ["hills", "plains"],
+    resourceType: "grapes",
+    qualityBonus: true,
+    buildTime: 5,
+    techRequired: "Viticulture"
+  },
+  
+  // Iron Age Buildings
+  glassworks: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { silica: 15 },
+    cost: { wood: 25, stone: 20 },
+    description: "Processes silica from sand dunes into glass.",
+    age: "Iron Age",
+    terrainRequirement: ["desert"],
+    resourceType: "silica",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Glassmaking"
+  },
+  smelter: {
+    category: "resource_node",
+    defense: 4,
+    vision: 1,
+    production: { ironOre: 20 },
+    cost: { stone: 30, wood: 25 },
+    description: "Advanced facility for processing iron ore.",
+    age: "Iron Age",
+    terrainRequirement: ["mountain"],
+    resourceType: "ironOre",
+    qualityBonus: true,
+    buildTime: 5,
+    techRequired: "Iron Working"
+  },
+  
+  // Medieval Age Buildings
+  peat_station: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { peat: 15 },
+    cost: { wood: 25, stone: 15 },
+    description: "Harvests peat from bogs for fuel and agriculture.",
+    age: "Medieval Age",
+    terrainRequirement: ["plains", "water"],
+    resourceType: "peat",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Bog Resource Management"
+  },
+  salt_marsh_farm: {
+    category: "resource_node",
+    defense: 2,
+    vision: 2,
+    production: { seaSalt: 15, food: 10 },
+    cost: { wood: 25, stone: 10 },
+    description: "Harvests sea salt and marsh herbs from coastal wetlands.",
+    age: "Medieval Age",
+    terrainRequirement: ["water", "plains"],
+    resourceType: "seaSalt",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Wetland Agriculture"
+  },
+  pearl_farm: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { pearls: 10, gold: 10 },
+    cost: { wood: 30, stone: 20 },
+    description: "Cultivates pearls from shallow sea coral reefs.",
+    age: "Medieval Age",
+    terrainRequirement: ["water"],
+    resourceType: "pearls",
+    qualityBonus: true,
+    buildTime: 5,
+    rarity: "rare",
+    techRequired: "Aquaculture"
+  },
+  
+  // Renaissance Age Buildings
+  oil_well: {
+    category: "resource_node",
+    defense: 3, 
+    vision: 1, 
+    production: { oil: 20 }, 
+    cost: { ironOre: 30, wood: 20 },
+    description: "Extracts oil from specific deposits.",
+    age: "Renaissance Age",
+    terrainRequirement: ["desert", "water"],
+    resourceType: "oil",
+    qualityBonus: true,
+    buildTime: 5,
+    rarity: "uncommon",
+    techRequired: "Early Drilling"
+  },
+  coal_mine: { 
+    category: "resource_node",
+    defense: 4, 
+    vision: 1, 
+    production: { coal: 15 }, 
+    cost: { gold: 65, wood: 25, stone: 20 },
+    age: "Renaissance Age",
+    terrainRequirement: ["mountain", "hills"],
+    resourceType: "coal",
+    qualityBonus: true,
+    buildTime: 5,
+    description: "Extracts coal for industrial use and fuel.",
+    techRequired: "Fossil Fuel Mining"
+  },
+  silica_mine: {
+    category: "resource_node",
+    defense: 3,
+    vision: 1,
+    production: { silica: 20 },
+    cost: { wood: 30, stone: 15 },
+    description: "Extracts silica from quartz veins in hills.",
+    age: "Renaissance Age",
+    terrainRequirement: ["hills"],
+    resourceType: "silica",
+    qualityBonus: true,
+    buildTime: 4,
+    techRequired: "Silica Extraction"
+  },
+  diamond_mine: {
+    category: "resource_node",
+    defense: 5,
+    vision: 1,
+    production: { diamonds: 10 },
+    cost: { wood: 40, stone: 30, ironOre: 25 },
+    description: "Extracts valuable diamonds from mountain deposits.",
+    age: "Industrial Age",
+    terrainRequirement: ["mountain"],
+    resourceType: "diamonds",
+    qualityBonus: true,
+    buildTime: 5,
+    rarity: "rare",
+    techRequired: "Gemstone Mining"
+  },
+  
+  // Imperial Age Buildings
+  rubber_plantation: {
+    category: "resource_node",
+    defense: 3,
+    vision: 2,
+    production: { rubber: 15 },
+    cost: { wood: 30, stone: 15 },
+    description: "Cultivates and harvests rubber from tropical rubber trees.",
+    age: "Imperial Age",
+    terrainRequirement: ["forest"],
+    resourceType: "rubber",
+    qualityBonus: true,
+    buildTime: 5,
+    techRequired: "Plantation Agriculture"
+  },
+  
+  // Modern/Future Age Buildings
+  offshore_oil_rig: {
+    category: "resource_node",
+    defense: 5,
+    vision: 3,
+    production: { offshoreOil: 25 },
+    cost: { ironOre: 40, wood: 25, stone: 30 },
+    description: "Extracts oil from deep sea deposits.",
+    age: "Modern Age",
+    terrainRequirement: ["water"],
+    resourceType: "offshoreOil",
+    qualityBonus: true,
+    buildTime: 6,
+    techRequired: "Advanced Drilling"
+  },
+  nuclear_plant: {
+    category: "resource_node",
+    defense: 8,
+    vision: 2,
+    production: { techPoints: 30 },
+    cost: { ironOre: 100, stone: 80, gold: 150 },
+    description: "Generates significant power and technology points from uranium deposits.",
+    age: "Modern Age",
+    terrainRequirement: ["mountain"],
+    resourceType: "uranium",
+    qualityBonus: true,
+    buildTime: 8,
+    rarity: "rare",
+    techRequired: "Nuclear Engineering"
+  },
+  geothermal_station: {
+    category: "resource_node",
+    defense: 4,
+    vision: 1,
+    production: { geothermal: 20 },
+    cost: { ironOre: 50, stone: 40 },
+    description: "Harnesses geothermal energy from volcanic vents.",
+    age: "Modern Age",
+    terrainRequirement: ["mountain", "hills"],
+    resourceType: "geothermal",
+    qualityBonus: true,
+    buildTime: 6,
+    techRequired: "Geothermal Technology"
   }
 };
 
@@ -346,7 +617,19 @@ export const resourceExtractors = {
   coal: ["coal_mine"],
   oil: ["oil_well"],
   sulfur: ["sulfur_pit"],
-  techPoints: ["research_lab"]
+  techPoints: ["research_lab"],
+  // New resources
+  offshoreOil: ["offshore_oil_rig"],
+  salt: ["saltworks"],
+  silica: ["glassworks", "silica_mine"],
+  uranium: ["nuclear_plant"],
+  diamonds: ["diamond_mine"],
+  geothermal: ["geothermal_station"],
+  peat: ["peat_station"],
+  rubber: ["rubber_plantation"],
+  grapes: ["winery"],
+  seaSalt: ["salt_marsh_farm"],
+  pearls: ["pearl_farm"]
 };
 
 // Building upgrade paths
@@ -391,9 +674,9 @@ export function canPlaceBuilding(buildingType, x, y, gameState) {
     return { canPlace: true, reason: 'Valid location for farm' };
   }
   
-  // Handle special case for logging_camp which needs forest
-  if (buildingType === 'logging_camp' && tile.type === 'forest') {
-    console.log('Logging camp placement check: Valid forest terrain');
+  // Handle special case for logging_camp which needs forest or wood
+  if (buildingType === 'logging_camp' && (tile.type === 'forest' || tile.type === 'wood')) {
+    console.log(`Logging camp placement check: Valid terrain (${tile.type})`);
     return { canPlace: true, reason: 'Valid location for logging camp' };
   }
   
@@ -406,10 +689,11 @@ export function canPlaceBuilding(buildingType, x, y, gameState) {
     }
   }
   
-  // Handle special case for hunters_hut
-  if (buildingType === 'hunters_hut' && (tile.type === 'plains' || tile.type === 'forest')) {
-    console.log('Hunters hut placement check: Valid plains or forest terrain');
-    return { canPlace: true, reason: 'Valid location for hunters hut' };
+  // Handle special case for hunters_hut and hunting_lodge
+  if ((buildingType === 'hunters_hut' || buildingType === 'hunting_lodge') && 
+      (tile.type === 'plains' || tile.type === 'forest' || tile.type === 'food' || tile.type === 'wildlife')) {
+    console.log(`${buildingType} placement check: Valid terrain (${tile.type})`);
+    return { canPlace: true, reason: `Valid location for ${buildingType}` };
   }
   
   // Check if tile already has a building or unit

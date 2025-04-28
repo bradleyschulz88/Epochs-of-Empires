@@ -8,7 +8,6 @@ export const terrainTypes = {
   forest: { color: '#33691E', moveCost: 2, description: 'Slows infantry/cavalry; offers cover' },
   desert: { color: '#FFC107', moveCost: 2, description: 'Harsh; non-desert units pay full cost' },
   hills: { color: '#795548', moveCost: 2, description: 'Grants vision bonus; costs extra effort' },
-  road: { color: '#A0522D', moveCost: 1, description: 'Overrides underlying terrain cost; see Road Bonus' },
   river: { color: '#87CEEB', moveCost: 2, description: 'Land units only at bridges/fords; else impassable' },
   tundra: { color: '#E0FFFF', moveCost: 2, description: 'Same as Forest for simplicity' },
   ...resourceTileTypes

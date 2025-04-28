@@ -240,7 +240,7 @@ select:hover { border-color: #a0aec0; }
   filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
 }
 .hidden-resource { 
-  opacity: 0.3; 
+  display: none; /* Hide resources not available in the current age */
   pointer-events: none;
 }
 
@@ -578,16 +578,19 @@ select:hover { border-color: #a0aec0; }
   margin: 5px 0;
   font-style: italic;
 }
-.taxation-control input[type="range"] { 
-  width: 100%; 
-  margin: 10px 0;
+/* Style for all range inputs */
+input[type="range"] {
   -webkit-appearance: none;
+  appearance: none;
   height: 10px;
   border-radius: 5px;
   background: #e2e8f0;
   outline: none;
+  margin: 10px 0;
 }
-.taxation-control input[type="range"]::-webkit-slider-thumb {
+
+/* Thumb styling for all range inputs */
+input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 20px;
@@ -597,9 +600,30 @@ select:hover { border-color: #a0aec0; }
   cursor: pointer;
   transition: all 0.2s;
 }
-.taxation-control input[type="range"]::-webkit-slider-thumb:hover {
+
+input[type="range"]::-webkit-slider-thumb:hover {
   background: #38b2ac;
   transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  background: #38b2ac;
+  transform: scale(1.1);
+}
+
+/* Specific styling for taxation control range inputs */
+.taxation-control input[type="range"] { 
+  width: 100%;
 }
 
 /* Keyboard shortcuts */

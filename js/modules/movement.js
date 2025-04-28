@@ -3,7 +3,6 @@ import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
 
 // Constants for movement
-const ROAD_BONUS_MP = 1;
 const ZOC_EXTRA_COST = 1; // Zone of Control additional cost
 const DEBUG_MOVEMENT = true; // Enable movement debugging
 
@@ -163,13 +162,7 @@ function calculateMovementCost(unitTypeInfo, terrainType, map, x, y, unitOwner) 
         return 1;
     }
     
-    // Roads override the underlying terrain cost
-    if (terrainType === 'road') {
-        if (DEBUG_MOVEMENT) {
-            console.log(`Road terrain cost override: 1`);
-        }
-        return 1; // Fixed cost for roads
-    }
+    // Road terrain has been removed
     
     // If terrain is water and unit is amphibious
     if (terrainType === 'water' && unitTypeInfo.abilities && unitTypeInfo.abilities.includes('amphibious')) {
@@ -291,23 +284,8 @@ export function moveUnit(unit, targetX, targetY, map, notifyCallback) {
     // Reduce movement points
     unit.remainingMP -= moveResult.cost;
     
-    // Check for road bonus - if on a road, gain +1 bonus MP
+    // Road bonus section removed as road terrain has been removed
     let roadBonusApplied = false;
-    if (map[targetY][targetX].type === 'road') {
-        const beforeRoadBonus = unit.remainingMP;
-        unit.remainingMP += ROAD_BONUS_MP;
-        roadBonusApplied = true;
-        
-        // But don't exceed the unit's maximum MP
-        const maxMP = unitTypes[unit.type].move;
-        if (unit.remainingMP > maxMP) {
-            unit.remainingMP = maxMP;
-        }
-        
-        if (DEBUG_MOVEMENT) {
-            console.log(`Road bonus: +${ROAD_BONUS_MP} MP (${beforeRoadBonus} -> ${unit.remainingMP})`);
-        }
-    }
     
     // Check for cavalry charge bonus
     checkForCavalryChargeBonus(unit, map);
@@ -490,9 +468,9 @@ function checkForCavalryChargeBonus(unit, map) {
     
     if (!isCavalry) return;
     
-    // Check starting terrain (must be plains or road)
+    // Check starting terrain (must be plains)
     const startingTerrain = map[unit.startingY][unit.startingX].type;
-    if (startingTerrain !== 'plains' && startingTerrain !== 'road') return;
+    if (startingTerrain !== 'plains') return;
     
     // Check if the unit moved at least 3 MP
     const mpUsed = unitTypeInfo.move - unit.remainingMP;
@@ -581,4 +559,104 @@ export function initializeUnitMovement(unit) {
     unit.startingY = unit.y;
     unit.cavalryChargeBonusActive = false;
     unit.attackBonus = 0;
+}
+
+/**
+ * Find all valid movement locations for a selected unit
+ * @param {Object} unit - The unit to check movement for
+ * @param {Array} map - The game map
+ * @returns {Array} - Array of valid movement locations as {x, y, cost} objects
+ */
+export function getValidMovementLocations(unit, map) {
+    if (!unit) return [];
+    
+    // Ensure unit has movement properties initialized
+    if (unit.remainingMP === undefined || unit.canMove === undefined) {
+        initializeUnitMovement(unit);
+    }
+    
+    // If unit can't move, return empty array
+    if (!unit.canMove || unit.remainingMP <= 0) {
+        return [];
+    }
+    
+    const mapSize = map.length;
+    const validLocations = [];
+    
+    // Use breadth-first search to find all reachable tiles within MP limit
+    const queue = [{x: unit.x, y: unit.y, mpLeft: unit.remainingMP}];
+    const visited = {}; // Track visited tiles to avoid loops
+    visited[`${unit.x},${unit.y}`] = true;
+    
+    // Calculate which unit type we're dealing with for diagonal movement check
+    const unitTypeInfo = unitTypes[unit.type];
+    const canMoveDiagonally = unitTypeInfo.type !== 'land' || 
+                             (unitTypeInfo.abilities && unitTypeInfo.abilities.includes('mobility'));
+    
+    // Define possible movement directions
+    let directions;
+    if (canMoveDiagonally) {
+        directions = [
+            {dx: -1, dy: -1}, {dx: 0, dy: -1}, {dx: 1, dy: -1},
+            {dx: -1, dy: 0},                   {dx: 1, dy: 0},
+            {dx: -1, dy: 1},  {dx: 0, dy: 1},  {dx: 1, dy: 1}
+        ];
+    } else {
+        // Only cardinal directions for units that can't move diagonally
+        directions = [
+                           {dx: 0, dy: -1},
+            {dx: -1, dy: 0},                {dx: 1, dy: 0},
+                           {dx: 0, dy: 1}
+        ];
+    }
+    
+    while (queue.length > 0) {
+        const current = queue.shift();
+        
+        // Skip the starting tile for valid locations list
+        if (current.x !== unit.x || current.y !== unit.y) {
+            validLocations.push({
+                x: current.x,
+                y: current.y,
+                cost: unit.remainingMP - current.mpLeft
+            });
+        }
+        
+        // Check each possible direction
+        for (const dir of directions) {
+            const nextX = current.x + dir.dx;
+            const nextY = current.y + dir.dy;
+            
+            // Skip if outside map bounds
+            if (nextX < 0 || nextY < 0 || nextX >= mapSize || nextY >= mapSize) {
+                continue;
+            }
+            
+            // Skip already visited tiles
+            if (visited[`${nextX},${nextY}`]) {
+                continue;
+            }
+            
+            // Check if we can move to this tile
+            const moveResult = canMoveToTile(unit, current.x, current.y, nextX, nextY, map, true);
+            
+            if (moveResult.canMove && moveResult.cost <= current.mpLeft) {
+                // Mark as visited
+                visited[`${nextX},${nextY}`] = true;
+                
+                // Add to queue with updated MP
+                queue.push({
+                    x: nextX,
+                    y: nextY,
+                    mpLeft: current.mpLeft - moveResult.cost
+                });
+            }
+        }
+    }
+    
+    if (DEBUG_MOVEMENT) {
+        console.log(`Found ${validLocations.length} valid movement locations for ${unit.type} at (${unit.x},${unit.y})`);
+    }
+    
+    return validLocations;
 }

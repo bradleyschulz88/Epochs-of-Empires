@@ -36,8 +36,9 @@ function createPlayerObject(id, name, color, faction, isAI = false, inactive = f
     color: color,
     faction: faction,
     resources: { 
-      food: 50, 
-      wood: 50
+      food: 100, 
+      wood: 100,
+      manpower: 10
     },
     upkeep: {
       food: 0,

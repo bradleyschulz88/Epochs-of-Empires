@@ -19,13 +19,15 @@ import {
   buildStructure,
   processProductionQueues
 } from './modules/gameEvents.js';
+import { revealArea } from './modules/map.js';
 import {
   moveUnit as moveUnitSystem,
   canMoveToTile,
   boardTransport,
   disembarkUnit,
   resetMovementPoints,
-  initializeUnitMovement
+  initializeUnitMovement,
+  getValidMovementLocations
 } from './modules/movement.js';
 
 // Game canvas and context
@@ -603,6 +605,36 @@ function handleMouseMove(e) {
   renderGame();
 }
 
+/**
+ * Reveals a tile and surrounding area when clicked in fog of war
+ * @param {Number} x - X coordinate of the tile to reveal
+ * @param {Number} y - Y coordinate of the tile to reveal
+ */
+function revealTile(x, y) {
+  const playerIndex = gameState.currentPlayer - 1;
+  const revealRadius = 2; // Small reveal radius for clicked tiles
+  
+  // Use the revealArea function from map.js module
+  revealArea(gameState, x, y, revealRadius, playerIndex);
+  
+  // Also check if there's a unit selected
+  if (selectedUnit) {
+    // When a unit is selected and player clicks on fog, also allow moving to that tile
+    const moveResult = canMoveToTile(selectedUnit, selectedUnit.x, selectedUnit.y, x, y, gameState.map, true);
+    
+    if (moveResult.canMove) {
+      // Valid move - proceed with movement automatically after revealing
+      moveUnit(selectedUnit, x, y);
+      showNotification(`Unit moved to the newly revealed location`);
+      
+      // Make sure we update the unit panel if it's still showing
+      updateUnitActionsPanel(selectedUnit);
+    }
+  }
+  
+  showNotification(`Area revealed at (${x}, ${y})`);
+}
+
 // Handle clicks on the game canvas
 function handleCanvasClick(e) {
   if (!gameStarted) return;
@@ -626,8 +658,11 @@ function handleCanvasClick(e) {
   
   const clickedTile = gameState.map[gridY][gridX];
   
-  // Only interact with discovered tiles
-  if (!clickedTile.discovered[gameState.currentPlayer - 1]) return;
+  // Skip interaction with undiscovered tiles - fog only disappears when a unit uncovers it
+  if (!clickedTile.discovered[gameState.currentPlayer - 1]) {
+    showNotification("This area is covered by fog of war. Send units to explore.");
+    return;
+  }
   
   // If we're trying to build something
   if (gameState.selectedBuildingType) {
@@ -642,14 +677,24 @@ function handleCanvasClick(e) {
   // Handle unit action mode (move, attack)
   if (gameState.unitActionMode && selectedUnit) {
     if (gameState.unitActionMode === 'move') {
-      // Attempt to move the unit to the clicked location
-      moveUnit(selectedUnit, gridX, gridY);
+      // Check if the clicked location is a valid movement destination
+      const validLocation = gameState.validMovementLocations && 
+                           gameState.validMovementLocations.find(loc => loc.x === gridX && loc.y === gridY);
       
-      // Update unit UI panel with new MP
-      updateUnitActionsPanel(selectedUnit);
+      if (validLocation) {
+        // Attempt to move the unit to the clicked location
+        moveUnit(selectedUnit, gridX, gridY);
+        
+        // Update unit UI panel with new MP
+        updateUnitActionsPanel(selectedUnit);
+      } else {
+        // If clicked on invalid location, show notification
+        showNotification('Cannot move to that location');
+      }
       
-      // Clear unit action mode
+      // Clear unit action mode and valid movement locations
       gameState.unitActionMode = null;
+      gameState.validMovementLocations = null;
     } 
     else if (gameState.unitActionMode === 'attack') {
       // Check if the clicked tile has an enemy unit
@@ -681,13 +726,21 @@ function handleCanvasClick(e) {
     updateUnitActionsPanel(selectedUnit);
     switchTab('actions');
   } else if (selectedUnit && !gameState.unitActionMode) {
-    // Move or attack with selected unit (direct click without explicit mode)
-    moveUnit(selectedUnit, gridX, gridY);
-    selectedUnit = null;
-    gameState.selectedUnit = null;
+    // Check if this is a valid move before attempting direct movement
+    const moveResult = canMoveToTile(selectedUnit, selectedUnit.x, selectedUnit.y, gridX, gridY, gameState.map);
     
-    // Hide unit actions
-    unitActionsContainer.style.display = 'none';
+    if (moveResult.canMove) {
+      // Valid move - proceed with movement
+      moveUnit(selectedUnit, gridX, gridY);
+      selectedUnit = null;
+      gameState.selectedUnit = null;
+      
+      // Hide unit actions
+      unitActionsContainer.style.display = 'none';
+    } else {
+      // Invalid move - show notification with reason
+      showNotification(moveResult.reason);
+    }
   }
   
   renderGame();
@@ -731,6 +784,16 @@ function attackUnit(attackingUnit, defendingUnit) {
   } else {
     showNotification(`Attacked enemy ${defendingUnit.type}, dealing ${damage}% damage.`);
   }
+  
+  // Since attacking uses all movement points, automatically close the action menu
+  const unitActionsContainer = document.getElementById('unit-actions-container');
+  if (unitActionsContainer) {
+    unitActionsContainer.style.display = 'none';
+  }
+  
+  // Also clear the selected unit
+  selectedUnit = null;
+  gameState.selectedUnit = null;
 }
 
 // Update the unit actions panel with information about the selected unit
@@ -810,10 +873,128 @@ function moveUnit(unit, targetX, targetY) {
   const success = moveUnitSystem(unit, targetX, targetY, gameState.map, showNotification);
   
   if (success) {
+    // Reveal fog of war around the unit's new position
+    const unitTypeInfo = unitTypes[unit.type];
+    const visionRadius = unitTypeInfo.vision || 2; // Default to 2 if vision not specified
+    revealArea(gameState, targetX, targetY, visionRadius, gameState.currentPlayer - 1);
+    
+    // Check if unit moved to a resource tile and automatically build the appropriate structure
+    const targetTile = gameState.map[targetY][targetX];
+    autoConstructResourceBuilding(targetTile, targetX, targetY);
+
+/**
+ * Automatically build the appropriate resource structure on a tile
+ * @param {Object} tile - The tile to build on
+ * @param {Number} x - X coordinate of the tile
+ * @param {Number} y - Y coordinate of the tile
+ */
+function autoConstructResourceBuilding(tile, x, y) {
+  const tileType = tile.type;
+  const player = gameState.players[gameState.currentPlayer - 1];
+  let buildingType = null;
+  
+  // Skip if the tile already has a building
+  if (tile.building || tile.buildingInProgress) {
+    return;
+  }
+  
+// Map resource types to appropriate buildings based on the tile and resource types
+  
+  // Check if the tile type matches a resource type with predefined building
+  const resourceInfo = resourceTileTypes[tileType];
+  if (resourceInfo && resourceInfo.buildingType) {
+    buildingType = resourceInfo.buildingType;
+  }
+  // Handle special cases for terrains
+  else if (tileType === 'plains') {
+    // Plains could be farm or house depending on context
+    if (tile.resourceType === 'settlement') {
+      buildingType = 'house'; // Settlement zone → House (Early Homes)
+    } else {
+      buildingType = 'farm'; // Default to farm for plains (Basic Agriculture)
+    }
+  }
+  
+  // For special resource types not in resourceTileTypes but still needing buildings
+  else if (tileType === 'seaSalt') {
+    buildingType = 'salt_marsh_farm'; // Saltwater Marsh → Salt Marsh Farm (Bronze Age)
+  }
+  else if (tileType === 'saltMarsh') {
+    buildingType = 'salt_marsh_farm'; // Saltwater Marsh → Salt Marsh Farm (Wetland Agriculture)
+  }
+  else if (tileType === 'pearls' || tileType === 'coral') {
+    buildingType = 'pearl_farm'; // Coral Reef → Pearl Farm (Aquaculture)
+  }
+  else if (tileType === 'silica' || tileType === 'quartz') {
+    buildingType = 'silica_mine'; // Quartz Vein → Silica Mine (Silica Extraction)
+  }
+  
+  // If no resource tile matched, return without building
+  if (!buildingType) {
+    return;
+  }
+  
+  // Check if the building type is available for the current age
+  const buildingInfo = buildingTypes[buildingType];
+  if (!buildingInfo || (buildingInfo.age && gameState.ages.indexOf(buildingInfo.age) > gameState.ages.indexOf(player.age))) {
+    // Building not available in current age
+    return;
+  }
+  
+  // Check if player has resources to build
+  if (buildingInfo.cost) {
+    for (const resource in buildingInfo.cost) {
+      if (!player.resources[resource] || player.resources[resource] < buildingInfo.cost[resource]) {
+        // Not enough resources
+        return;
+      }
+    }
+    
+    // Deduct resources
+    for (const resource in buildingInfo.cost) {
+      player.resources[resource] -= buildingInfo.cost[resource];
+    }
+  }
+  
+  // Add to building queue
+  player.buildingQueue.push({
+    type: buildingType,
+    x: x,
+    y: y,
+    progress: 0
+  });
+  
+  // Show building in progress on the map
+  tile.buildingInProgress = {
+    type: buildingType,
+    owner: gameState.currentPlayer,
+    progress: 0
+  };
+  
+  // Update UI
+  updateResourceDisplay(gameState);
+  
+  showNotification(`Automatically constructing ${buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} at (${x}, ${y})`);
+}
+    
     // Add movement UI update here - could be added to the UI module
     const unitMP = unit.remainingMP || 0;
     const maxMP = unitTypes[unit.type].move;
     showNotification(`${unit.type} MP: ${unitMP}/${maxMP}`);
+    
+    // If the unit has no MP left, automatically close the unit action menu
+    if (unitMP <= 0) {
+      const unitActionsContainer = document.getElementById('unit-actions-container');
+      if (unitActionsContainer) {
+        unitActionsContainer.style.display = 'none';
+      }
+      
+      // Also clear the selected unit
+      selectedUnit = null;
+      gameState.selectedUnit = null;
+      
+      showNotification(`${unit.type} has no movement points remaining`);
+    }
   }
 }
 
@@ -866,11 +1047,14 @@ window.prepareUnitMove = () => {
   if (selectedUnit) {
     showNotification('Click on destination tile to move unit');
     
-    // Highlight valid movement tiles could be implemented here
-    // For now, just show a notification
+    // Find and store valid movement locations
+    gameState.validMovementLocations = getValidMovementLocations(selectedUnit, gameState.map);
     
     // Set game state to indicate we're in unit movement mode
     gameState.unitActionMode = 'move';
+    
+    // Render the game to show movement options
+    renderGame();
   }
 };
 
@@ -996,48 +1180,72 @@ window.openSettings = function() {
 
 // Start new game from UI button
 window.startNewGameFromUI = function() {
+  console.log("Starting new game from UI button");
   // Create a confirmation dialog
   if (confirm("Start a new game? Your current progress will be lost.")) {
-    // Reset game variables
-    gameState = createInitialGameState();
-    window.gameState = gameState;
-    mouseX = 0;
-    mouseY = 0;
-    cameraOffsetX = 0;
-    cameraOffsetY = 0;
-    isDragging = false;
-    dragStartX = 0;
-    dragStartY = 0;
-    selectedUnit = null;
-    gameStarted = false;
-    currentTab = 'actions';
-    
-    // Clean up any existing game elements
-    if (canvas) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-    if (minimap) {
-      minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
-    }
-    
-    // Show loading indicator
-    const loadingElement = document.getElementById('loading');
-    if (loadingElement) {
-      loadingElement.style.display = 'block';
-    }
-    
-    // Delay to ensure the UI updates before showing start menu
-    setTimeout(() => {
-      // Show the start menu again
+    try {
+      console.log("Resetting game state");
+      
+      // Hide the game container first
+      const gameContainer = document.getElementById('gameContainer');
+      if (gameContainer) {
+        gameContainer.style.display = 'none';
+      }
+      
+      // Show loading indicator
+      const loadingElement = document.getElementById('loading');
+      if (loadingElement) {
+        loadingElement.style.display = 'block';
+        console.log("Loading indicator shown");
+      }
+      
+      // Properly remove any existing startMenuOverlay to ensure a clean start
+      const existingOverlay = document.getElementById('startMenuOverlay');
+      if (existingOverlay) {
+        document.body.removeChild(existingOverlay);
+        console.log("Removed existing start menu overlay");
+      }
+      
+      // Reset game variables
+      gameState = createInitialGameState();
+      window.gameState = gameState;
+      mouseX = 0;
+      mouseY = 0;
+      cameraOffsetX = 0;
+      cameraOffsetY = 0;
+      isDragging = false;
+      dragStartX = 0;
+      dragStartY = 0;
+      selectedUnit = null;
+      gameStarted = false;
+      currentTab = 'actions';
+      
+      // Clean up any existing game elements
+      if (canvas) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      if (minimap) {
+        minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+      }
+      
+      // Directly call initStartMenu instead of using setTimeout
+      console.log("Initializing start menu...");
       initStartMenu(startGame);
       
-      // Hide loading indicator after a short delay
+      // Hide loading indicator
       setTimeout(() => {
         if (loadingElement) {
           loadingElement.style.display = 'none';
+          console.log("Loading indicator hidden");
         }
       }, 500);
-    }, 100);
+      
+    } catch (error) {
+      console.error("Critical error in startNewGameFromUI:", error);
+      alert("An error occurred. Please refresh the page.");
+    }
+  } else {
+    console.log("New game cancelled by user");
   }
 };
 

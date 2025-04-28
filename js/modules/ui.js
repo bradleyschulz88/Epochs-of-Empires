@@ -184,8 +184,516 @@ export function updateUpkeepDisplay(gameState) {
 
 // Update building buttons display with resource costs
 export function updateBuildingButtons(gameState, startBuilding) {
-  // Use the category filter function with 'all' to show all buildings
-  updateBuildingButtonsByCategory(gameState, 'all', startBuilding);
+  createBuildingMenuTabs(gameState, startBuilding);
+}
+
+// Create category tabs for building menu
+// Cache for storing building data by age
+const buildingMenuCache = {};
+
+function createBuildingMenuTabs(gameState, startBuilding) {
+  const buildingMenu = document.querySelector('.building-buttons');
+  buildingMenu.innerHTML = '';
+  
+  const player = gameState.players[gameState.currentPlayer - 1];
+  const playerAge = player.age;
+  const playerAgeIndex = gameState.ages.indexOf(playerAge);
+  
+  console.log(`Creating building menu for ${playerAge} (index: ${playerAgeIndex})`);
+  
+  // Search and filter controls
+  const searchFilters = document.createElement('div');
+  searchFilters.className = 'building-search-filters';
+  
+  // Search input
+  const searchContainer = document.createElement('div');
+  searchContainer.className = 'building-search';
+  
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Search buildings...';
+  searchInput.setAttribute('aria-label', 'Search buildings');
+  searchInput.addEventListener('input', () => {
+    filterBuildings(gameState, searchInput.value);
+  });
+  
+  searchContainer.appendChild(searchInput);
+  searchFilters.appendChild(searchContainer);
+  
+  // Filter toggles
+  const filterToggles = document.createElement('div');
+  filterToggles.className = 'filter-toggles';
+  
+  // Show locked buildings toggle
+  const lockedFilter = document.createElement('label');
+  lockedFilter.className = 'filter-toggle';
+  
+  const lockedCheckbox = document.createElement('input');
+  lockedCheckbox.type = 'checkbox';
+  lockedCheckbox.checked = true;
+  lockedCheckbox.id = 'show-locked';
+  lockedCheckbox.setAttribute('aria-label', 'Show locked buildings');
+  lockedCheckbox.addEventListener('change', () => {
+    document.querySelectorAll('.building-locked, .building-tech-locked').forEach(card => {
+      card.style.display = lockedCheckbox.checked ? 'flex' : 'none';
+    });
+  });
+  
+  lockedFilter.appendChild(lockedCheckbox);
+  lockedFilter.appendChild(document.createTextNode('Show Locked Buildings'));
+  
+  // Show obsolete buildings toggle
+  const obsoleteFilter = document.createElement('label');
+  obsoleteFilter.className = 'filter-toggle';
+  
+  const obsoleteCheckbox = document.createElement('input');
+  obsoleteCheckbox.type = 'checkbox';
+  obsoleteCheckbox.checked = false;
+  obsoleteCheckbox.id = 'show-obsolete';
+  obsoleteCheckbox.setAttribute('aria-label', 'Show obsolete buildings');
+  obsoleteCheckbox.addEventListener('change', () => {
+    document.querySelectorAll('.building-obsolete').forEach(card => {
+      card.style.display = obsoleteCheckbox.checked ? 'flex' : 'none';
+    });
+  });
+  
+  obsoleteFilter.appendChild(obsoleteCheckbox);
+  obsoleteFilter.appendChild(document.createTextNode('Show Obsolete Buildings'));
+  
+  filterToggles.appendChild(lockedFilter);
+  filterToggles.appendChild(obsoleteFilter);
+  searchFilters.appendChild(filterToggles);
+  buildingMenu.appendChild(searchFilters);
+  
+  // Age navigation
+  const ageNavigation = document.createElement('div');
+  ageNavigation.className = 'age-navigation';
+  
+  const prevAgeButton = document.createElement('button');
+  prevAgeButton.className = 'age-nav-button';
+  prevAgeButton.textContent = '← Previous Age';
+  prevAgeButton.disabled = playerAgeIndex <= 0;
+  prevAgeButton.onclick = () => {
+    if (playerAgeIndex > 0) {
+      showBuildingsFromAge(gameState, gameState.ages[playerAgeIndex - 1], startBuilding, true);
+    }
+  };
+  
+  const ageDisplay = document.createElement('span');
+  ageDisplay.className = 'current-age-display';
+  ageDisplay.textContent = playerAge;
+  
+  const nextAgeButton = document.createElement('button');
+  nextAgeButton.className = 'age-nav-button';
+  nextAgeButton.textContent = 'Next Age →';
+  nextAgeButton.disabled = playerAgeIndex >= gameState.ages.length - 1;
+  nextAgeButton.onclick = () => {
+    if (playerAgeIndex < gameState.ages.length - 1) {
+      showBuildingsFromAge(gameState, gameState.ages[playerAgeIndex + 1], startBuilding, true);
+    }
+  };
+  
+  ageNavigation.appendChild(prevAgeButton);
+  ageNavigation.appendChild(ageDisplay);
+  ageNavigation.appendChild(nextAgeButton);
+  buildingMenu.appendChild(ageNavigation);
+  
+  // Create tab container
+  const tabContainer = document.createElement('div');
+  tabContainer.className = 'building-tabs';
+  tabContainer.setAttribute('role', 'tablist');
+  tabContainer.setAttribute('aria-label', 'Building categories');
+  buildingMenu.appendChild(tabContainer);
+  
+  // Create content container
+  const contentContainer = document.createElement('div');
+  contentContainer.className = 'building-tabs-content';
+  contentContainer.setAttribute('role', 'tabpanel');
+  contentContainer.setAttribute('aria-live', 'polite');
+  buildingMenu.appendChild(contentContainer);
+  
+  // Get building categories for the current age
+  const categoryLabels = {
+    "resource_node": "Resource Production",
+    "production": "Military",
+    "economic": "Economy",
+    "defense": "Defense",
+    "housing": "Housing",
+    "city_center": "City Centers"
+  };
+  
+  // Check which categories have buildings available in the current age
+  const availableCategories = new Set();
+  
+  for (const buildingType in buildingTypes) {
+    const building = buildingTypes[buildingType];
+    const buildingAgeIndex = gameState.ages.indexOf(building.age);
+    
+    // Skip HQ as it's placed at start
+    if (buildingType === 'hq') continue;
+    
+    // Include all buildings up to and including the current age
+    if (buildingAgeIndex <= playerAgeIndex) {
+      availableCategories.add(building.category);
+    }
+  }
+  
+  // Create 'All' tab first
+  const allTab = document.createElement('div');
+  allTab.className = 'building-tab active';
+  allTab.textContent = 'All Buildings';
+  allTab.dataset.category = 'all';
+  allTab.setAttribute('role', 'tab');
+  allTab.setAttribute('aria-selected', 'true');
+  allTab.setAttribute('aria-controls', 'building-tab-all');
+  allTab.setAttribute('tabindex', '0');
+  
+  allTab.addEventListener('click', () => {
+    document.querySelectorAll('.building-tab').forEach(t => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
+      t.setAttribute('tabindex', '-1');
+    });
+    allTab.classList.add('active');
+    allTab.setAttribute('aria-selected', 'true');
+    allTab.setAttribute('tabindex', '0');
+    contentContainer.setAttribute('aria-labelledby', `building-tab-all`);
+    updateBuildingTabContent(gameState, 'all', startBuilding);
+  });
+  
+  // Add keyboard navigation for tab
+  allTab.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      allTab.click();
+    }
+  });
+  
+  tabContainer.appendChild(allTab);
+  
+  // Create tabs only for categories that have buildings
+  availableCategories.forEach(category => {
+    const tab = document.createElement('div');
+    tab.className = 'building-tab';
+    tab.textContent = categoryLabels[category] || category;
+    tab.dataset.category = category;
+    
+    tab.addEventListener('click', () => {
+      // Remove active class from all tabs
+      document.querySelectorAll('.building-tab').forEach(t => t.classList.remove('active'));
+      
+      // Add active class to clicked tab
+      tab.classList.add('active');
+      
+      // Update content
+      updateBuildingTabContent(gameState, category, startBuilding);
+    });
+    
+    tabContainer.appendChild(tab);
+  });
+  
+// Initialize with 'All' selected
+  updateBuildingTabContent(gameState, 'all', startBuilding);
+}
+
+// Filter buildings by search term
+function filterBuildings(gameState, searchTerm) {
+  const searchTermLower = searchTerm.toLowerCase();
+  const buildingCards = document.querySelectorAll('.building-card');
+  
+  buildingCards.forEach(card => {
+    const buildingName = card.querySelector('h4').textContent.toLowerCase();
+    const buildingDescription = card.querySelector('.building-tooltip').textContent.toLowerCase();
+    
+    if (searchTerm === '' || 
+        buildingName.includes(searchTermLower) || 
+        buildingDescription.includes(searchTermLower)) {
+      card.style.display = 'flex';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+  
+  // Hide age headers with no visible buildings
+  const ageHeaders = document.querySelectorAll('.building-age-header');
+  ageHeaders.forEach(header => {
+    // Find next header or end of container
+    let sibling = header.nextElementSibling;
+    let visibleBuildings = 0;
+    
+    while (sibling && !sibling.classList.contains('building-age-header')) {
+      if (sibling.classList.contains('building-card') && 
+          sibling.style.display !== 'none') {
+        visibleBuildings++;
+      }
+      sibling = sibling.nextElementSibling;
+    }
+    
+    header.style.display = visibleBuildings > 0 ? 'block' : 'none';
+  });
+}
+
+// Update building tab content
+function updateBuildingTabContent(gameState, category, startBuilding, isPreview = false) {
+  const contentContainer = document.querySelector('.building-tabs-content');
+  contentContainer.innerHTML = '';
+  
+  const player = gameState.players[gameState.currentPlayer - 1];
+  const playerAge = player.age;
+  const playerAgeIndex = gameState.ages.indexOf(playerAge);
+  
+  console.log(`Updating building content for category: ${category}, age: ${playerAge}`);
+  
+  // Get player technologies for prerequisite checks
+  const playerTechs = player.technologies || [];
+  
+  // Create details container that will hold grid and sidebar
+  const detailsContainer = document.createElement('div');
+  detailsContainer.className = 'details-container';
+  contentContainer.appendChild(detailsContainer);
+  
+  // Create grid container for building cards
+  const buildingGrid = document.createElement('div');
+  buildingGrid.className = 'building-grid';
+  detailsContainer.appendChild(buildingGrid);
+  
+  // Create details sidebar (initially empty)
+  const detailsSidebar = document.createElement('div');
+  detailsSidebar.className = 'building-details-sidebar';
+  detailsSidebar.innerHTML = '<div class="details-placeholder">Select a building to see details</div>';
+  detailsSidebar.setAttribute('aria-live', 'polite');
+  detailsContainer.appendChild(detailsSidebar);
+  
+  // Count of buildings displayed
+  let buildingCount = 0;
+  
+  // Group buildings by age for better organization
+  const buildingsByAge = {};
+  
+  // First pass to organize buildings by age
+  for (const buildingType in buildingTypes) {
+    // Skip HQ as it's placed at start
+    if (buildingType === 'hq') continue;
+    
+    const building = buildingTypes[buildingType];
+    
+    // Filter by category if not showing all
+    if (category !== 'all' && building.category !== category) continue;
+    
+    const buildingAge = building.age || 'Stone Age';
+    
+    if (!buildingsByAge[buildingAge]) {
+      buildingsByAge[buildingAge] = [];
+    }
+    
+    buildingsByAge[buildingAge].push({buildingType, building});
+  }
+  
+  // Then display buildings ordered by age
+  for (const age of gameState.ages) {
+    const buildings = buildingsByAge[age];
+    if (!buildings || buildings.length === 0) continue;
+    
+    const ageHeader = document.createElement('h3');
+    ageHeader.className = 'building-age-header';
+    ageHeader.textContent = age;
+    buildingGrid.appendChild(ageHeader);
+    
+    const ageIndex = gameState.ages.indexOf(age);
+    const ageStatus = ageIndex < playerAgeIndex ? 'past' : (ageIndex === playerAgeIndex ? 'current' : 'future');
+    
+    for (const {buildingType, building} of buildings) {
+      // Create building card
+      const card = document.createElement('div');
+      card.className = 'building-card';
+      
+      // Determine building lock state
+      let lockState = 'unlocked';
+      let lockReason = '';
+      const buildingAgeIndex = gameState.ages.indexOf(building.age);
+      
+      if (buildingAgeIndex > playerAgeIndex) {
+        lockState = 'locked'; // Future age building
+        lockReason = `Available in ${building.age}`;
+      } else if (building.techRequired && !playerTechs.includes(building.techRequired)) {
+        lockState = 'tech-locked'; // Missing tech prerequisite
+        lockReason = `Requires ${building.techRequired}`;
+      } else if (ageStatus === 'past' && ageIndex < playerAgeIndex - 1) {
+        lockState = 'obsolete'; // Building from 2+ ages ago
+        lockReason = 'Obsolete';
+      }
+      
+      // Add lock state class
+      card.classList.add(`building-${lockState}`);
+      
+      // Building name
+      const buildingName = document.createElement('h4');
+      buildingName.textContent = buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      card.appendChild(buildingName);
+      
+      // Building icon (placeholder)
+      const icon = document.createElement('div');
+      icon.className = 'building-icon';
+      icon.innerHTML = `<span class="icon-placeholder">${buildingType.charAt(0).toUpperCase()}</span>`;
+      
+      // Add lock indicator if locked
+      if (lockState === 'locked' || lockState === 'tech-locked') {
+        const lockIcon = document.createElement('div');
+        lockIcon.className = 'lock-icon';
+        lockIcon.textContent = '🔒';
+        icon.appendChild(lockIcon);
+      } else if (lockState === 'obsolete') {
+        const obsoleteIcon = document.createElement('div');
+        obsoleteIcon.className = 'obsolete-icon';
+        obsoleteIcon.textContent = '⚠️';
+        icon.appendChild(obsoleteIcon);
+      }
+      
+      card.appendChild(icon);
+      
+      // Building prerequisites
+      if (building.techRequired) {
+        const prereqDiv = document.createElement('div');
+        prereqDiv.className = 'building-prerequisites';
+        prereqDiv.textContent = `Requires: ${building.techRequired}`;
+        card.appendChild(prereqDiv);
+      }
+      
+      // Building cost
+      const costDiv = document.createElement('div');
+      costDiv.className = 'building-cost';
+      
+      for (const resource in building.cost) {
+        const costItem = document.createElement('div');
+        costItem.className = 'building-cost-item';
+        
+        // Get resource icon
+        const resourceIcon = resourceIcons[resource] || '📦';
+        
+        costItem.innerHTML = `${resourceIcon} ${building.cost[resource]}`;
+        costDiv.appendChild(costItem);
+      }
+      
+      card.appendChild(costDiv);
+      
+      // Building yields/production
+      if (building.production) {
+        const yieldsDiv = document.createElement('div');
+        yieldsDiv.className = 'building-yields';
+        
+        let yieldsText = 'Yields: ';
+        for (const resource in building.production) {
+          const resourceIcon = resourceIcons[resource] || '📦';
+          yieldsText += `${resourceIcon} ${building.production[resource]}, `;
+        }
+        
+        yieldsDiv.textContent = yieldsText.slice(0, -2); // Remove trailing comma
+        card.appendChild(yieldsDiv);
+      }
+      
+      // Help icon for more info
+      const helpIcon = document.createElement('div');
+      helpIcon.className = 'building-help';
+      helpIcon.textContent = '?';
+      helpIcon.title = building.description || `${buildingType.replace(/_/g, ' ')}`;
+      card.appendChild(helpIcon);
+      
+      // Rich tooltip
+      const tooltip = document.createElement('div');
+      tooltip.className = 'building-tooltip';
+      
+      tooltip.innerHTML = `
+        <strong>${buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong><br>
+        Age: ${building.age || 'Stone Age'}<br>
+        ${building.description || ''}<br>
+        ${building.techRequired ? `Requires: ${building.techRequired}<br>` : ''}
+        ${building.category ? `Type: ${buildingCategories[building.category] || building.category}<br>` : ''}
+        ${lockReason ? `Status: ${lockReason}` : ''}
+      `;
+      
+      card.appendChild(tooltip);
+      
+      // Only make unlocked buildings clickable
+      if (lockState === 'unlocked' && !isPreview) {
+        // Add click event listener for building
+        card.addEventListener('click', () => {
+          // Check if player can afford it
+          let canAfford = true;
+          let missingResources = [];
+          
+          for (const resource in building.cost) {
+            const required = building.cost[resource];
+            const available = player.resources[resource] || 0;
+            
+            if (available < required) {
+              canAfford = false;
+              missingResources.push(`${resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}: ${available}/${required}`);
+            }
+          }
+          
+          if (canAfford) {
+            startBuilding(buildingType);
+          } else {
+            // Show notification about missing resources
+            showNotification(`Cannot afford ${buildingType.replace(/_/g, ' ')}: Missing ${missingResources.join(', ')}`);
+          }
+        });
+      }
+      
+      buildingGrid.appendChild(card);
+      buildingCount++;
+    }
+  }
+  
+  // If no buildings were displayed, show a message
+  if (buildingCount === 0) {
+    const message = document.createElement('div');
+    message.className = 'no-buildings-message';
+    message.style.padding = '20px';
+    message.style.textAlign = 'center';
+    message.style.color = '#718096';
+    
+    if (category === 'all') {
+      message.textContent = `No buildings available in the ${playerAge}. Research technologies to unlock more building options.`;
+    } else {
+      message.textContent = `No ${buildingCategories[category] || category} buildings available in the ${playerAge}. Research technologies to unlock more building options.`;
+    }
+    
+    buildingGrid.appendChild(message);
+  }
+}
+
+// Show buildings from a specific age (for age navigation buttons)
+function showBuildingsFromAge(gameState, age, startBuilding, isPreview = false) {
+  const buildingMenu = document.querySelector('.building-buttons');
+  const ageDisplay = buildingMenu.querySelector('.current-age-display');
+  
+  // Update age display
+  ageDisplay.textContent = age + (isPreview ? ' (Preview)' : '');
+  
+  // Create a modified gameState copy with the selected age
+  const modifiedGameState = {...gameState};
+  const modifiedPlayer = {...gameState.players[gameState.currentPlayer - 1]};
+  modifiedPlayer.age = age;
+  
+  // Replace the current player in the copied state
+  modifiedGameState.players = [...gameState.players];
+  modifiedGameState.players[gameState.currentPlayer - 1] = modifiedPlayer;
+  
+  // Get the currently active tab
+  const activeTab = document.querySelector('.building-tab.active');
+  const category = activeTab ? activeTab.dataset.category : 'all';
+  
+  // Update the tab content with the modified state
+  updateBuildingTabContent(modifiedGameState, category, startBuilding, isPreview);
+  
+  // Update the navigation buttons
+  const ageIndex = gameState.ages.indexOf(age);
+  const prevButton = buildingMenu.querySelector('.age-nav-button:first-child');
+  const nextButton = buildingMenu.querySelector('.age-nav-button:last-child');
+  
+  prevButton.disabled = ageIndex <= 0;
+  nextButton.disabled = ageIndex >= gameState.ages.length - 1;
 }
 
 // Update building buttons filtered by category
@@ -680,6 +1188,24 @@ export function render(gameState, canvasData) {
           ctx.strokeRect(screenX + 2, screenY + 2, effectiveTileSize - 4, effectiveTileSize - 4);
         }
         
+        // Highlight valid movement locations when in move mode
+        if (gameState.unitActionMode === 'move' && gameState.validMovementLocations) {
+          // Find if this tile is a valid movement location
+          const validLocation = gameState.validMovementLocations.find(loc => loc.x === x && loc.y === y);
+          if (validLocation) {
+            // Blue highlight for valid movement locations
+            ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
+            ctx.fillRect(screenX, screenY, effectiveTileSize, effectiveTileSize);
+            
+            // Show movement cost
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(validLocation.cost, screenX + effectiveTileSize/2, screenY + effectiveTileSize/2);
+            ctx.textAlign = 'start'; // Reset text align
+          }
+        }
+        
         // Highlight tile under mouse
         if (Math.floor((mouseX + cameraOffsetX) / effectiveTileSize) === x && 
             Math.floor((mouseY + cameraOffsetY) / effectiveTileSize) === y) {
@@ -701,6 +1227,33 @@ export function render(gameState, canvasData) {
         // Apply semi-transparent fog overlay
         ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
         ctx.fillRect(screenX, screenY, effectiveTileSize, effectiveTileSize);
+        
+        // Highlight fogged tile under mouse to indicate it can be clicked
+        if (Math.floor((mouseX + cameraOffsetX) / effectiveTileSize) === x && 
+            Math.floor((mouseY + cameraOffsetY) / effectiveTileSize) === y) {
+          ctx.strokeStyle = '#ffff00';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(screenX + 2, screenY + 2, effectiveTileSize - 4, effectiveTileSize - 4);
+        }
+        
+        // Show unit movement highlight if in move mode - even in fogged areas if they're valid movement locations
+        if (gameState.unitActionMode === 'move' && gameState.validMovementLocations) {
+          const validLocation = gameState.validMovementLocations.find(loc => loc.x === x && loc.y === y);
+          if (validLocation) {
+            ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
+            ctx.fillRect(screenX, screenY, effectiveTileSize, effectiveTileSize);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(validLocation.cost, screenX + effectiveTileSize/2, screenY + effectiveTileSize/2);
+            ctx.textAlign = 'start';
+            
+            // Add "unexplored" text for fogged tiles
+            ctx.font = '8px Arial';
+            ctx.fillText('unexplored', screenX + effectiveTileSize/2, screenY + effectiveTileSize/2 + 10);
+          }
+        }
       }
       
       // Draw on minimap
