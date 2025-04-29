@@ -64,3 +64,57 @@ npm install
 
 # Start in development mode
 npm run dev
+
+Usage
+Launch a Skirmish
+bash
+Copy
+Edit
+npm run start -- \
+  --mapSize huge \
+  --startAge StoneAge \
+  --mode ffa
+In-Game Console (Dev Only)
+Press ~ to open console and enter debug commands:
+
+js
+Copy
+Edit
+// Advance research to Renaissance Age
+game.research.complete('Gunpowder');
+// Spawn 100 Food
+game.resources.add('Food', 100);
+Contributing
+We love contributions! Please read our CONTRIBUTING.md for guidelines.
+
+Fork the repository
+
+Create your feature branch
+
+Commit your changes with clear messages
+
+Push to your branch and open a Pull Request
+
+Roadmap
+
+Milestone	Description	ETA
+v0.1.0	Core gameplay: Ages 1–5, single-player skirmish	Q3 2025
+v0.2.0	All 11 ages, AI tuning, UI polish	Q4 2025
+v1.0.0	Multiplayer & Scenario Editor	Q1 2026
+v1.1.0	Mobile port, accessibility features	Q3 2026
+License
+Distributed under the MIT License. See LICENSE for more information.
+
+Contact
+Lead Developer: Your Name – youremail@example.com
+Project: https://github.com/yourusername/epochs-of-empires
+Discord: https://discord.gg/your-invite
+
+Acknowledgements
+GameMaker Blog: Running a Successful Crowdfunding Campaign
+
+Awesome README
+
+Readme Best Practices
+
+All our early playtesters and contributors!
