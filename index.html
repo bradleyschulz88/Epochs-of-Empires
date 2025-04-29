@@ -161,29 +161,54 @@
       
       <div class="tab-content" id="diplomacy-tab">
         <h3>Diplomacy Actions</h3>
-        <select id="diplomacyAction" onchange="window.handleDiplomacy()">
-          <option value="">Select Action</option>
-          <option value="ally">Form Alliance</option>
-          <option value="trade">Trade Resources</option>
-          <option value="war">Declare War</option>
-          <option value="peace">Negotiate Peace</option>
-        </select>
-        
-        <div class="trade-routes-container">
-          <h3>Trade Routes</h3>
-          <div id="tradeRoutesList">
-            <!-- Trade routes will be populated dynamically -->
-            <div class="no-trade-routes">No active trade routes</div>
+        <div class="diplomacy-container">
+          <div class="diplomacy-status">
+            <p>Current Status: <span id="diplomacyStatus" aria-live="polite">Neutral</span></p>
           </div>
-          <button onclick="window.createTradeRoute()" id="createTradeRouteBtn">Create Trade Route</button>
-        </div>
-        
-        <h3>Game Settings</h3>
-        <button onclick="window.openSettings()" class="settings-button">Open Settings</button>
-        <div class="taxation-control">
-          <h4>Tax Rate: <span id="taxRateDisplay">0%</span></h4>
-          <input type="range" id="taxSlider" min="0" max="20" value="0" onchange="window.adjustTaxRate(this.value)">
-          <p>Higher taxes increase gold but reduce happiness</p>
+          
+          <div class="diplomacy-actions">
+            <label for="diplomacyAction">Choose Action:</label>
+            <select id="diplomacyAction" aria-label="Select diplomacy action">
+              <option value="">Select Action</option>
+              <option value="ally">Form Alliance</option>
+              <option value="trade">Trade Resources</option>
+              <option value="war">Declare War</option>
+              <option value="peace">Negotiate Peace</option>
+            </select>
+            <button onclick="window.handleDiplomacy()" class="diplomacy-button" aria-label="Execute diplomacy action">
+              Execute Action
+            </button>
+          </div>
+
+          <div class="trade-routes-container">
+            <h4>Active Trade Routes</h4>
+            <div id="tradeRoutesList" aria-live="polite">
+              <!-- Trade routes will be populated dynamically -->
+              <div class="no-trade-routes">No active trade routes</div>
+            </div>
+            <button onclick="window.createTradeRoute()" 
+                    id="createTradeRouteBtn" 
+                    class="trade-route-button"
+                    aria-label="Create new trade route">
+              Create Trade Route
+            </button>
+          </div>
+
+          <div class="taxation-control">
+            <h4>Tax Rate Control</h4>
+            <div class="tax-display">Current Rate: <span id="taxRateDisplay" aria-live="polite">0%</span></div>
+            <div class="tax-slider-container">
+              <label for="taxSlider">Adjust Tax Rate:</label>
+              <input type="range" 
+                     id="taxSlider" 
+                     min="0" 
+                     max="20" 
+                     value="0" 
+                     onchange="window.adjustTaxRate(this.value)"
+                     aria-label="Tax rate slider">
+            </div>
+            <p class="tax-info">Higher taxes increase gold but reduce happiness</p>
+          </div>
         </div>
       </div>
       

@@ -167,35 +167,81 @@ export function setAIDifficulty(gameState, difficulty) {
 
 // Handle diplomacy actions
 export function handleDiplomacy(gameState, action) {
-  const activePlayer = gameState.players[gameState.currentPlayer - 1];
-  const otherPlayerIndex = gameState.currentPlayer % 2;
-  const otherPlayer = gameState.players[otherPlayerIndex];
-  
-  switch (action) {
-    case 'ally':
-      activePlayer.diplomacy.status = 'Allied';
-      otherPlayer.diplomacy.status = 'Allied';
-      showNotification(`Alliance formed with ${otherPlayer.name}`);
-      break;
-      
-    case 'trade':
-      showNotification(`Trade established with ${otherPlayer.name}`);
-      break;
-      
-    case 'war':
-      activePlayer.diplomacy.status = 'War';
-      otherPlayer.diplomacy.status = 'War';
-      showNotification(`War declared on ${otherPlayer.name}`);
-      break;
-      
-    case 'peace':
-      activePlayer.diplomacy.status = 'Neutral';
-      otherPlayer.diplomacy.status = 'Neutral';
-      showNotification(`Peace negotiated with ${otherPlayer.name}`);
-      break;
+  try {
+    const activePlayer = gameState.players[gameState.currentPlayer - 1];
+    const otherPlayerIndex = gameState.currentPlayer % 2;
+    const otherPlayer = gameState.players[otherPlayerIndex];
+
+    if (!action) {
+      throw new Error('No diplomacy action specified');
+    }
+
+    if (!otherPlayer) {
+      throw new Error('No valid target player found');
+    }
+
+    // Check if action is allowed based on current status
+    const currentStatus = activePlayer.diplomacy.status;
+    const allowedActions = {
+      'Neutral': ['ally', 'trade', 'war'],
+      'Allied': ['trade', 'war'],
+      'War': ['peace'],
+      'Trade': ['ally', 'war', 'peace']
+    };
+
+    if (!allowedActions[currentStatus]?.includes(action)) {
+      throw new Error(`Cannot perform ${action} while in ${currentStatus} status`);
+    }
+
+    switch (action) {
+      case 'ally':
+        if (activePlayer.diplomacy.status === 'War') {
+          throw new Error('Cannot form alliance while at war');
+        }
+        activePlayer.diplomacy.status = 'Allied';
+        otherPlayer.diplomacy.status = 'Allied';
+        showNotification(`Alliance formed with ${otherPlayer.name}`, 'success');
+        break;
+
+      case 'trade':
+        if (activePlayer.diplomacy.status === 'War') {
+          throw new Error('Cannot establish trade while at war');
+        }
+        showNotification(`Trade established with ${otherPlayer.name}`, 'success');
+        break;
+
+      case 'war':
+        if (activePlayer.diplomacy.treaties?.includes('nonAggression')) {
+          throw new Error('Cannot declare war while non-aggression pact is active');
+        }
+        activePlayer.diplomacy.status = 'War';
+        otherPlayer.diplomacy.status = 'War';
+        showNotification(`War declared on ${otherPlayer.name}`, 'warning');
+        break;
+
+      case 'peace':
+        if (!activePlayer.diplomacy.peaceCooldown) {
+          activePlayer.diplomacy.status = 'Neutral';
+          otherPlayer.diplomacy.status = 'Neutral';
+          showNotification(`Peace negotiated with ${otherPlayer.name}`, 'success');
+        } else {
+          throw new Error(`Peace negotiations available in ${activePlayer.diplomacy.peaceCooldown} turns`);
+        }
+        break;
+
+      default:
+        throw new Error(`Unknown diplomacy action: ${action}`);
+    }
+
+    // Update UI
+    document.getElementById('diplomacyStatus').textContent = activePlayer.diplomacy.status;
+    
+  } catch (error) {
+    console.error('Diplomacy action failed:', error);
+    showNotification(error.message, 'error');
+    // Reset diplomacy action selector
+    document.getElementById('diplomacyAction').value = '';
   }
-  
-  document.getElementById('diplomacyStatus').textContent = activePlayer.diplomacy.status;
 }
 
 // Process production queues for the current player
