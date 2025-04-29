@@ -20,9 +20,11 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     width: 600px;
     max-width: 90%;
+    max-height: 90vh; /* Limit height to 90% of viewport height */
     padding: 30px;
     position: relative;
     animation: fadeIn 0.3s ease-out;
+    overflow-y: auto; /* Enable scrolling */
 }
 
 .start-menu-container h1 {
@@ -63,6 +65,19 @@
     margin-bottom: 15px;
     display: flex;
     flex-direction: column;
+}
+
+/* Country Description */
+.country-description {
+    background-color: #f1f5f9;
+    border-left: 4px solid #38b2ac;
+    padding: 10px 15px;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    border-radius: 0 4px 4px 0;
+    color: #4a5568;
+    font-style: italic;
+    line-height: 1.5;
 }
 
 .setting-group label {
@@ -338,11 +353,26 @@
     }
 }
 
+/* Ensure the menu buttons are always visible */
+.menu-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+    margin-bottom: 20px; /* Add bottom margin */
+    position: sticky; /* Make it sticky */
+    bottom: 0; /* Stick to bottom */
+    background: #fff; /* Ensure it's visible against content */
+    padding: 10px 0; /* Add some padding */
+    z-index: 5; /* Ensure it's above other content */
+}
+
 /* Responsive Adjustments */
 @media (max-width: 640px) {
     .start-menu-container,
     .settings-container {
         padding: 20px;
+        max-height: 85vh; /* Slightly smaller on mobile */
     }
     
     .menu-buttons {

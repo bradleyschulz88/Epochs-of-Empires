@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>War Game</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/building-menu.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/building-menu.css">
+  <link rel="stylesheet" href="css/building-suggestion.css">
   <link rel="stylesheet" href="css/start-menu.css">
+  <link rel="stylesheet" href="css/actions-tab-fix.css">
 </head>
 <body>
   <div id="gameContainer">
@@ -50,6 +52,7 @@
           <div class="progress-bar" id="ageProgressBar"></div>
           <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
         </div>
+        <hr style="margin: 15px 0; border: none; border-top: 1px solid #edf2f7;">
         
         <!-- Unit actions container - shown when unit is selected -->
         <div id="unit-actions-container" style="display: none; margin: 10px 0;">
@@ -63,19 +66,46 @@
           </div>
         </div>
         
-        <h3>Construct Building</h3>
-        <div class="building-category-selector">
-          <select id="buildingCategoryFilter" onchange="window.filterBuildingsByCategory()">
-            <option value="all">All Buildings</option>
-            <option value="resource_node">Resource Buildings</option>
-            <option value="production">Production Buildings</option>
-            <option value="economic">Economic Buildings</option>
-            <option value="defense">Defense Buildings</option>
-            <option value="housing">Housing</option>
-          </select>
-        </div>
-        <div class="building-buttons">
-          <!-- Building buttons will be populated dynamically -->
+        <!-- BUILDINGS SECTION -->
+        <div id="buildings-section" style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 20px; border: 2px solid #4a5568;">
+          <h3 style="margin-top: 0; padding: 10px; background: #4a5568; color: white; border-radius: 8px; text-align: center; font-size: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">Construct Building</h3>
+          
+          <!-- Building filter -->
+          <div style="margin: 15px 0; display: block !important;">
+            <select id="buildingCategoryFilter" onchange="window.filterBuildingsByCategory()" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e0; background-color: white;">
+              <option value="all">All Buildings</option>
+              <option value="resource_node">Resource Buildings</option>
+              <option value="production">Production Buildings</option>
+              <option value="economic">Economic Buildings</option>
+              <option value="defense">Defense Buildings</option>
+              <option value="housing">Housing</option>
+            </select>
+          </div>
+          
+          <!-- Simple building buttons that are guaranteed to display -->
+          <div id="simple-building-buttons" style="margin-bottom: 20px;">
+            <h4 style="margin: 10px 0; color: #4a5568;">Quick Build Options:</h4>
+            <button onclick="window.startBuilding('farm')" style="background-color: #68d391; color: #234e52; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
+              Build Farm (50 Wood)
+            </button>
+            <button onclick="window.startBuilding('house')" style="background-color: #4299e1; color: #2a4365; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
+              Build House (40 Wood, 20 Stone)
+            </button>
+            <button onclick="window.startBuilding('logging_camp')" style="background-color: #9ae6b4; color: #234e52; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
+              Build Logging Camp (30 Wood)
+            </button>
+            <button onclick="window.startBuilding('hunters_hut')" style="background-color: #fbd38d; color: #744210; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
+              Build Hunter's Hut (40 Wood)
+            </button>
+          </div>
+          
+          <!-- Building buttons container with simplied styling -->
+          <div class="building-buttons" style="max-height: 400px; overflow-y: auto; border: 1px solid #cbd5e0; padding: 15px; border-radius: 8px; background-color: white;">
+            <div id="building-menu-loading" style="padding: 20px; text-align: center; color: #4a5568; font-weight: bold;">
+              Building menu is being loaded...
+            </div>
+            <!-- Building buttons will be populated dynamically -->
+          </div>
         </div>
       </div>
       

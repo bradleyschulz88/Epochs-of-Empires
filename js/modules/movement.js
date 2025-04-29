@@ -1,6 +1,7 @@
-// Movement System for War Game
+// Movement System for War Game with Hex Grid Support
 import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
+import { axialToPixel, pixelToAxial } from './map.js';
 
 // Constants for movement
 const ZOC_EXTRA_COST = 1; // Zone of Control additional cost
@@ -26,9 +27,16 @@ export function canMoveToTile(unit, sourceX, sourceY, targetX, targetY, map, isP
     // Get unit type information
     const unitTypeInfo = unitTypes[unit.type];
     
-    // Get the target tile
+    // Get the source and target tiles
+    const sourceTile = map[sourceY][sourceX];
     const targetTile = map[targetY][targetX];
     const terrainType = targetTile.type;
+    
+    // Get axial coordinates if available
+    const sourceQ = sourceTile.q !== undefined ? sourceTile.q : sourceX;
+    const sourceR = sourceTile.r !== undefined ? sourceTile.r : sourceY;
+    const targetQ = targetTile.q !== undefined ? targetTile.q : targetX;
+    const targetR = targetTile.r !== undefined ? targetTile.r : targetY;
     
     // Check if the unit already moved this turn
     if (!unit.canMove && !isPartOfPath) {
@@ -45,10 +53,13 @@ export function canMoveToTile(unit, sourceX, sourceY, targetX, targetY, map, isP
         return { canMove: false, cost: 0, reason: "Cannot move to a tile with a friendly unit" };
     }
     
-    // Check diagonal movement (if not allowed)
-    const isDiagonal = Math.abs(targetX - sourceX) === 1 && Math.abs(targetY - sourceY) === 1;
-    if (isDiagonal && unitTypeInfo.type === 'land' && !(unitTypeInfo.abilities && unitTypeInfo.abilities.includes('mobility'))) {
-        return { canMove: false, cost: 0, reason: "This unit cannot move diagonally" };
+    // Check if hex is adjacent - in hex grid, only 6 directions are valid neighbors
+    // Calculate axial distance between tiles
+    const axialDistance = (Math.abs(targetQ - sourceQ) + Math.abs(targetR - sourceR) + 
+                          Math.abs(sourceQ + sourceR - targetQ - targetR)) / 2;
+    
+    if (axialDistance > 1) {
+        return { canMove: false, cost: 0, reason: "Hex is not adjacent to the current location" };
     }
     
     // Check terrain passability based on unit type
@@ -197,7 +208,7 @@ function calculateMovementCost(unitTypeInfo, terrainType, map, x, y, unitOwner) 
 }
 
 /**
- * Check if a tile has adjacent enemy units (for Zone of Control)
+ * Check if a tile has adjacent enemy units (for Zone of Control) using hex grid
  * @param {Array} map - The game map
  * @param {Number} x - X coordinate
  * @param {Number} y - Y coordinate
@@ -206,22 +217,46 @@ function calculateMovementCost(unitTypeInfo, terrainType, map, x, y, unitOwner) 
  */
 function hasAdjacentEnemyUnit(map, x, y, unitOwner) {
     const mapSize = map.length;
+    const tile = map[y][x];
+    
+    // Get q,r axial coordinates from the tile if they exist
+    const q = tile.q !== undefined ? tile.q : x;
+    const r = tile.r !== undefined ? tile.r : y;
+    
+    // Use hexagonal directions for adjacency check
     const directions = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1]
+        {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
+        {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
     ];
     
-    for (const [dx, dy] of directions) {
-        const newX = x + dx;
-        const newY = y + dy;
+    for (const dir of directions) {
+        const newQ = q + dir.q;
+        const newR = r + dir.r;
         
-        // Check bounds
-        if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize) {
-            const tile = map[newY][newX];
-            if (tile.unit && tile.unit.owner !== unitOwner) {
-                return true;
+        // Find the corresponding x,y coordinates for the q,r neighbor
+        // During transition, we need to find tiles by their axial coordinates
+        let adjacentTile = null;
+        
+        // Try to find the tile by axial coordinates
+        for (let y = 0; y < mapSize; y++) {
+            for (let x = 0; x < mapSize; x++) {
+                if (map[y][x].q === newQ && map[y][x].r === newR) {
+                    adjacentTile = map[y][x];
+                    break;
+                }
             }
+            if (adjacentTile) break;
+        }
+        
+        // If tile was not found by axial coordinates, for backward compatibility
+        // try using the axial coordinates directly as array indices if they're in bounds
+        if (!adjacentTile && newQ >= 0 && newQ < mapSize && newR >= 0 && newR < mapSize) {
+            adjacentTile = map[newR][newQ];
+        }
+        
+        // Check if the tile has an enemy unit
+        if (adjacentTile && adjacentTile.unit && adjacentTile.unit.owner !== unitOwner) {
+            return true;
         }
     }
     
@@ -268,12 +303,24 @@ export function moveUnit(unit, targetX, targetY, map, notifyCallback) {
         console.log(`Terrain: ${sourceTerrainType} -> ${targetTerrainType}, Movement cost: ${moveResult.cost}`);
     }
     
+    // Store axial coordinates if present in source tile
+    const sourceQ = map[unit.y][unit.x].q;
+    const sourceR = map[unit.y][unit.x].r;
+    
     // Remove unit from current tile
     map[unit.y][unit.x].unit = null;
     
     // Update unit position
     unit.x = targetX;
     unit.y = targetY;
+    
+    // Update axial coordinates if available
+    if (map[targetY][targetX].q !== undefined) {
+        unit.q = map[targetY][targetX].q;
+    }
+    if (map[targetY][targetX].r !== undefined) {
+        unit.r = map[targetY][targetX].r;
+    }
     
     // Place unit on new tile
     map[targetY][targetX].unit = unit;
@@ -379,6 +426,15 @@ export function disembarkUnit(unit, transport, targetX, targetY, map, notifyCall
     // Place the unit on the map
     unit.x = targetX;
     unit.y = targetY;
+    
+    // Update axial coordinates if available in target tile
+    if (map[targetY][targetX].q !== undefined) {
+        unit.q = map[targetY][targetX].q;
+    }
+    if (map[targetY][targetX].r !== undefined) {
+        unit.r = map[targetY][targetX].r;
+    }
+    
     map[targetY][targetX].unit = unit;
     
     // Reset the unit's embarked status
@@ -410,7 +466,13 @@ function isTileValidForDisembark(x, y, map, transport, unit) {
     const tile = map[y][x];
     
     // Check if the tile is adjacent to the transport
-    if (!isAdjacentToCoordinates(x, y, transport.x, transport.y)) {
+    // For hexagonal grids we need to check using hex adjacency
+    if (!isAdjacentToCoordinatesHex(
+        tile.q !== undefined ? tile.q : x, 
+        tile.r !== undefined ? tile.r : y, 
+        transport.q !== undefined ? transport.q : transport.x, 
+        transport.r !== undefined ? transport.r : transport.y
+    )) {
         return false;
     }
     
@@ -430,17 +492,24 @@ function isTileValidForDisembark(x, y, map, transport, unit) {
 }
 
 /**
- * Check if two units are adjacent
+ * Check if two units are adjacent (works with both square and hex grids)
  * @param {Object} unit1 - The first unit
  * @param {Object} unit2 - The second unit
  * @returns {Boolean} - Whether the units are adjacent
  */
 function areUnitsAdjacent(unit1, unit2) {
+    // If axial coordinates are available, use hex adjacency
+    if (unit1.q !== undefined && unit1.r !== undefined && 
+        unit2.q !== undefined && unit2.r !== undefined) {
+        return isAdjacentToCoordinatesHex(unit1.q, unit1.r, unit2.q, unit2.r);
+    }
+    
+    // Fall back to square grid adjacency
     return isAdjacentToCoordinates(unit1.x, unit1.y, unit2.x, unit2.y);
 }
 
 /**
- * Check if two coordinates are adjacent
+ * Check if two coordinates are adjacent using square grid
  * @param {Number} x1 - X coordinate of the first point
  * @param {Number} y1 - Y coordinate of the first point
  * @param {Number} x2 - X coordinate of the second point
@@ -453,6 +522,27 @@ function isAdjacentToCoordinates(x1, y1, x2, y2) {
     const dy = Math.abs(y1 - y2);
     
     return (dx <= 1 && dy <= 1) && !(dx === 0 && dy === 0);
+}
+
+/**
+ * Check if two hexes are adjacent using axial coordinates
+ * @param {Number} q1 - Q axial coordinate of the first hex
+ * @param {Number} r1 - R axial coordinate of the first hex
+ * @param {Number} q2 - Q axial coordinate of the second hex
+ * @param {Number} r2 - R axial coordinate of the second hex
+ * @returns {Boolean} - Whether the hexes are adjacent
+ */
+function isAdjacentToCoordinatesHex(q1, r1, q2, r2) {
+    // Calculate the axial distance between two hexes
+    // In axial coordinates, distance = (abs(q1-q2) + abs(r1-r2) + abs(q1+r1-q2-r2)) / 2
+    const distance = (
+        Math.abs(q1 - q2) + 
+        Math.abs(r1 - r2) + 
+        Math.abs(q1 + r1 - q2 - r2)
+    ) / 2;
+    
+    // Hexes are adjacent if their distance is exactly 1
+    return distance === 1;
 }
 
 /**
@@ -523,6 +613,8 @@ export function resetMovementPoints(units) {
         // Store starting position for cavalry charge calculations
         unit.startingX = unit.x;
         unit.startingY = unit.y;
+        if (unit.q !== undefined) unit.startingQ = unit.q;
+        if (unit.r !== undefined) unit.startingR = unit.r;
         
         if (DEBUG_MOVEMENT) {
             console.log(`Reset unit ${unit.type} MP: ${oldMP} -> ${unit.remainingMP}, Can move: ${oldCanMove} -> ${unit.canMove}`);
@@ -557,12 +649,14 @@ export function initializeUnitMovement(unit) {
     unit.cargo = [];
     unit.startingX = unit.x;
     unit.startingY = unit.y;
+    if (unit.q !== undefined) unit.startingQ = unit.q;
+    if (unit.r !== undefined) unit.startingR = unit.r;
     unit.cavalryChargeBonusActive = false;
     unit.attackBonus = 0;
 }
 
 /**
- * Find all valid movement locations for a selected unit
+ * Find all valid movement locations for a selected unit using hex grid
  * @param {Object} unit - The unit to check movement for
  * @param {Array} map - The game map
  * @returns {Array} - Array of valid movement locations as {x, y, cost} objects
@@ -583,32 +677,29 @@ export function getValidMovementLocations(unit, map) {
     const mapSize = map.length;
     const validLocations = [];
     
+    // Get the unit's axial coordinates if available
+    const unitQ = unit.q !== undefined ? unit.q : unit.x;
+    const unitR = unit.r !== undefined ? unit.r : unit.y;
+    
     // Use breadth-first search to find all reachable tiles within MP limit
-    const queue = [{x: unit.x, y: unit.y, mpLeft: unit.remainingMP}];
-    const visited = {}; // Track visited tiles to avoid loops
-    visited[`${unit.x},${unit.y}`] = true;
+    const queue = [{
+        x: unit.x, 
+        y: unit.y, 
+        q: unitQ, 
+        r: unitR, 
+        mpLeft: unit.remainingMP
+    }];
     
-    // Calculate which unit type we're dealing with for diagonal movement check
-    const unitTypeInfo = unitTypes[unit.type];
-    const canMoveDiagonally = unitTypeInfo.type !== 'land' || 
-                             (unitTypeInfo.abilities && unitTypeInfo.abilities.includes('mobility'));
+    // Track visited tiles to avoid loops (use coordKey to handle both coord systems)
+    const visited = {}; 
+    const coordKey = unit.q !== undefined ? `${unitQ},${unitR}` : `${unit.x},${unit.y}`;
+    visited[coordKey] = true;
     
-    // Define possible movement directions
-    let directions;
-    if (canMoveDiagonally) {
-        directions = [
-            {dx: -1, dy: -1}, {dx: 0, dy: -1}, {dx: 1, dy: -1},
-            {dx: -1, dy: 0},                   {dx: 1, dy: 0},
-            {dx: -1, dy: 1},  {dx: 0, dy: 1},  {dx: 1, dy: 1}
-        ];
-    } else {
-        // Only cardinal directions for units that can't move diagonally
-        directions = [
-                           {dx: 0, dy: -1},
-            {dx: -1, dy: 0},                {dx: 1, dy: 0},
-                           {dx: 0, dy: 1}
-        ];
-    }
+    // Define hex directions for axial coordinates
+    const hexDirections = [
+        {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
+        {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
+    ];
     
     while (queue.length > 0) {
         const current = queue.shift();
@@ -618,22 +709,45 @@ export function getValidMovementLocations(unit, map) {
             validLocations.push({
                 x: current.x,
                 y: current.y,
+                q: current.q,
+                r: current.r,
                 cost: unit.remainingMP - current.mpLeft
             });
         }
         
-        // Check each possible direction
-        for (const dir of directions) {
-            const nextX = current.x + dir.dx;
-            const nextY = current.y + dir.dy;
+        // Check each possible hex direction
+        for (const dir of hexDirections) {
+            const nextQ = current.q + dir.q;
+            const nextR = current.r + dir.r;
             
-            // Skip if outside map bounds
-            if (nextX < 0 || nextY < 0 || nextX >= mapSize || nextY >= mapSize) {
-                continue;
+            // Find the corresponding x,y coordinates for the q,r neighbor
+            let nextX = -1;
+            let nextY = -1;
+            let nextTile = null;
+            
+            // Try to find the tile by axial coordinates first
+            for (let y = 0; y < mapSize; y++) {
+                for (let x = 0; x < mapSize; x++) {
+                    if (map[y][x].q === nextQ && map[y][x].r === nextR) {
+                        nextX = x;
+                        nextY = y;
+                        nextTile = map[y][x];
+                        break;
+                    }
+                }
+                if (nextTile) break;
             }
             
-            // Skip already visited tiles
-            if (visited[`${nextX},${nextY}`]) {
+            // If tile not found by axial coords and we're in transition phase,
+            // try using axial coords directly as indices if in bounds 
+            if (!nextTile && nextQ >= 0 && nextQ < mapSize && nextR >= 0 && nextR < mapSize) {
+                nextX = nextQ;
+                nextY = nextR;
+                nextTile = map[nextY][nextX];
+            }
+            
+            // Skip if no valid tile was found or if already visited
+            if (!nextTile || visited[`${nextX},${nextY}`]) {
                 continue;
             }
             
@@ -648,6 +762,8 @@ export function getValidMovementLocations(unit, map) {
                 queue.push({
                     x: nextX,
                     y: nextY,
+                    q: nextQ,
+                    r: nextR,
                     mpLeft: current.mpLeft - moveResult.cost
                 });
             }

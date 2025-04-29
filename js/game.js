@@ -6,7 +6,7 @@ import { render, updateResourceDisplay, updateUpkeepDisplay, updateUnitButtons, 
 import { terrainTypes } from './modules/terrain.js';
 import { buildingTypes } from './modules/buildings.js';
 import { unitTypes } from './modules/units.js';
-import { resourcesByAge } from './modules/resources.js';
+import { resourcesByAge, resourceTileTypes } from './modules/resources.js';
 import { 
   endTurn, 
   startResearch, 
@@ -43,6 +43,69 @@ let dragStartX = 0, dragStartY = 0;
 let selectedUnit = null;
 let gameStarted = false;
 let currentTab = 'actions';
+
+// Hex grid constants and utility functions for pixel-to-hex conversion
+const HEX_SIZE = 30; // Size of hexagon (distance from center to corner)
+
+/**
+ * Convert axial coordinates (q,r) to pixel coordinates (x,y)
+ * @param {Number} q - Q axial coordinate
+ * @param {Number} r - R axial coordinate
+ * @param {Number} size - Size of hex (distance from center to corner)
+ * @returns {Object} - {x, y} pixel coordinates
+ */
+function axialToPixel(q, r, size = HEX_SIZE) {
+  const x = size * Math.sqrt(3) * (q + r/2);
+  const y = size * 3/2 * r;
+  return {x, y};
+}
+
+/**
+ * Convert pixel coordinates (x,y) to axial coordinates (q,r)
+ * @param {Number} x - X pixel coordinate
+ * @param {Number} y - Y pixel coordinate
+ * @param {Number} size - Size of hex (distance from center to corner)
+ * @returns {Object} - {q, r} axial coordinates (rounded to nearest hex)
+ */
+function pixelToAxial(x, y, size = HEX_SIZE) {
+  const q_float = (x * Math.sqrt(3)/3 - y/3) / size;
+  const r_float = y * 2/3 / size;
+  return roundToHex(q_float, r_float);
+}
+
+/**
+ * Helper function to round floating point axial coordinates to the nearest hex
+ * @param {Number} q - Q axial coordinate (floating point)
+ * @param {Number} r - R axial coordinate (floating point)
+ * @returns {Object} - {q, r} axial coordinates (rounded integers)
+ */
+function roundToHex(q, r) {
+  // Convert to cube coordinates for rounding
+  let x = q;
+  let z = r;
+  let y = -x - z;
+  
+  // Round cube coordinates
+  let rx = Math.round(x);
+  let ry = Math.round(y);
+  let rz = Math.round(z);
+  
+  // Fix rounding errors
+  const x_diff = Math.abs(rx - x);
+  const y_diff = Math.abs(ry - y);
+  const z_diff = Math.abs(rz - z);
+  
+  if (x_diff > y_diff && x_diff > z_diff) {
+    rx = -ry - rz;
+  } else if (y_diff > z_diff) {
+    ry = -rx - rz;
+  } else {
+    rz = -rx - ry;
+  }
+  
+  // Convert back to axial coordinates
+  return {q: rx, r: rz};
+}
 
 // Initialize the game
 window.onload = function() {
@@ -201,6 +264,20 @@ function startGame(settings) {
 function setupEventListeners() {
   console.log("Setting up event listeners");
   try {
+  // Event listener to close building suggestion when clicking anywhere
+  document.addEventListener('click', (e) => {
+    // Only handle this if it's not a direct click on the canvas
+    if (e.target !== canvas) {
+      const suggestion = document.querySelector('.building-suggestion');
+      if (suggestion) {
+        // Check if click is outside the suggestion box
+        if (!suggestion.contains(e.target)) {
+          suggestion.remove();
+        }
+      }
+    }
+  });
+
     // Tab switching
     const tabElements = document.querySelectorAll('.tab');
     if (tabElements && tabElements.length > 0) {
@@ -441,8 +518,200 @@ function switchTab(tabName) {
     // Update production building selector
     updateProductionBuildingSelector(gameState);
   } else if (tabName === 'actions') {
-    updateBuildingButtons(gameState, (buildingType) => startBuilding(gameState, buildingType));
-    updateAgeProgressDisplay(gameState);
+    // First, ensure our buildings section exists
+    const actionsTab = document.getElementById('actions-tab');
+    let buildingsSection = document.getElementById('buildings-section');
+    
+    if (!buildingsSection && actionsTab) {
+      // If buildings section doesn't exist, create it
+      console.log("Building section not found, creating it now");
+      buildingsSection = document.createElement('div');
+      buildingsSection.id = 'buildings-section';
+      buildingsSection.style.backgroundColor = '#f8fafc';
+      buildingsSection.style.padding = '15px';
+      buildingsSection.style.borderRadius = '8px';
+      buildingsSection.style.marginTop = '20px';
+      buildingsSection.style.border = '2px solid #4a5568';
+      
+      // Add the title
+      const title = document.createElement('h3');
+      title.style.margin = '0';
+      title.style.padding = '10px';
+      title.style.background = '#4a5568';
+      title.style.color = 'white';
+      title.style.borderRadius = '8px';
+      title.style.textAlign = 'center';
+      title.style.fontSize = '18px';
+      title.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      title.textContent = 'Construct Building';
+      buildingsSection.appendChild(title);
+      
+      // Add category filter
+      const filterContainer = document.createElement('div');
+      filterContainer.style.margin = '15px 0';
+      filterContainer.style.display = 'block';
+      
+      const filterSelect = document.createElement('select');
+      filterSelect.id = 'buildingCategoryFilter';
+      filterSelect.setAttribute('onchange', 'window.filterBuildingsByCategory()');
+      filterSelect.style.width = '100%';
+      filterSelect.style.padding = '10px';
+      filterSelect.style.borderRadius = '6px';
+      filterSelect.style.border = '1px solid #cbd5e0';
+      filterSelect.style.backgroundColor = 'white';
+      
+      // Add options
+      const categories = [
+        ['all', 'All Buildings'],
+        ['resource_node', 'Resource Buildings'],
+        ['production', 'Production Buildings'],
+        ['economic', 'Economic Buildings'],
+        ['defense', 'Defense Buildings'],
+        ['housing', 'Housing']
+      ];
+      
+      categories.forEach(([value, text]) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        filterSelect.appendChild(option);
+      });
+      
+      filterContainer.appendChild(filterSelect);
+      buildingsSection.appendChild(filterContainer);
+      
+      // Create quick build buttons
+      const quickBuildContainer = document.createElement('div');
+      quickBuildContainer.id = 'simple-building-buttons';
+      quickBuildContainer.style.marginBottom = '20px';
+      
+      const quickBuildTitle = document.createElement('h4');
+      quickBuildTitle.style.margin = '10px 0';
+      quickBuildTitle.style.color = '#4a5568';
+      quickBuildTitle.textContent = 'Quick Build Options:';
+      quickBuildContainer.appendChild(quickBuildTitle);
+      
+      // Add standard building buttons
+      const quickBuildings = [
+        ['farm', 'Farm (50 Wood)', '#68d391', '#234e52'],
+        ['house', 'House (40 Wood, 20 Stone)', '#4299e1', '#2a4365'],
+        ['logging_camp', 'Logging Camp (30 Wood)', '#9ae6b4', '#234e52'],
+        ['hunters_hut', 'Hunter\'s Hut (40 Wood)', '#fbd38d', '#744210']
+      ];
+      
+      quickBuildings.forEach(([type, text, bgColor, textColor]) => {
+        const btn = document.createElement('button');
+        btn.setAttribute('onclick', `window.startBuilding('${type}')`);
+        btn.style.backgroundColor = bgColor;
+        btn.style.color = textColor;
+        btn.style.fontWeight = 'bold';
+        btn.style.width = '100%';
+        btn.style.margin = '5px 0';
+        btn.style.padding = '12px';
+        btn.style.borderRadius = '8px';
+        btn.style.border = 'none';
+        btn.style.cursor = 'pointer';
+        btn.style.transition = 'all 0.2s';
+        btn.textContent = text;
+        
+        btn.addEventListener('mouseover', () => {
+          btn.style.transform = 'translateY(-2px)';
+          btn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+        });
+        
+        btn.addEventListener('mouseout', () => {
+          btn.style.transform = '';
+          btn.style.boxShadow = '';
+        });
+        
+        quickBuildContainer.appendChild(btn);
+      });
+      
+      buildingsSection.appendChild(quickBuildContainer);
+      
+      // Create container for building buttons
+      const buildingButtonsContainer = document.createElement('div');
+      buildingButtonsContainer.className = 'building-buttons';
+      buildingButtonsContainer.style.display = 'block';
+      buildingButtonsContainer.style.visibility = 'visible';
+      buildingButtonsContainer.style.opacity = '1';
+      buildingButtonsContainer.style.maxHeight = '400px';
+      buildingButtonsContainer.style.overflowY = 'auto';
+      buildingButtonsContainer.style.border = '1px solid #cbd5e0';
+      buildingButtonsContainer.style.padding = '15px';
+      buildingButtonsContainer.style.borderRadius = '8px';
+      buildingButtonsContainer.style.backgroundColor = 'white';
+      
+      // Add a loading message
+      const loadingMsg = document.createElement('div');
+      loadingMsg.id = 'building-menu-loading';
+      loadingMsg.style.padding = '20px';
+      loadingMsg.style.textAlign = 'center';
+      loadingMsg.style.color = '#4a5568';
+      loadingMsg.style.fontWeight = 'bold';
+      loadingMsg.style.backgroundColor = '#f7fafc';
+      loadingMsg.style.borderRadius = '8px';
+      loadingMsg.style.margin = '10px 0';
+      loadingMsg.style.border = '1px dashed #cbd5e0';
+      loadingMsg.textContent = 'Building menu is being loaded...';
+      
+      buildingButtonsContainer.appendChild(loadingMsg);
+      buildingsSection.appendChild(buildingButtonsContainer);
+      
+      // Add buildings section to actions tab
+      actionsTab.appendChild(buildingsSection);
+      
+      // Force UI to update - scroll to ensure visibility
+      actionsTab.scrollTop = 0;
+      setTimeout(() => {
+        if (buildingsSection) {
+          buildingsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
+    }
+    
+    // Make sure the building buttons container is visible
+    const buildingButtons = document.querySelector('.building-buttons');
+    if (buildingButtons) {
+      // Force display properties to ensure visibility
+      buildingButtons.style.display = 'block';
+      buildingButtons.style.visibility = 'visible';
+      buildingButtons.style.maxHeight = '400px';
+      buildingButtons.style.overflowY = 'auto';
+      buildingButtons.style.opacity = '1';
+      
+      // Log to check if the function is being called
+      console.log("Actions tab active, ensuring building menu container is visible");
+    } else {
+      console.error("Building buttons container not found after tab switch");
+    }
+    
+    // Update the building buttons content
+    try {
+      updateBuildingButtons(gameState, (buildingType) => startBuilding(gameState, buildingType));
+    } catch (e) {
+      console.error("Error updating building buttons:", e);
+    }
+    
+    try {
+      updateAgeProgressDisplay(gameState);
+    } catch (e) {
+      console.error("Error updating age progress display:", e);
+    }
+    
+    // Ensure visibility after a short delay
+    setTimeout(() => {
+      const buildingMenu = document.querySelector('.building-buttons');
+      if (buildingMenu) {
+        buildingMenu.style.display = 'block';
+        buildingMenu.style.visibility = 'visible';
+        buildingMenu.style.opacity = '1';
+        
+        // Force scrollIntoView to ensure visible
+        buildingMenu.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        console.log("Ensuring building menu visibility after tab switch");
+      }
+    }, 100);
   } else if (tabName === 'cities') {
     // Update city list and production queues
     updateCityList(gameState);
@@ -549,16 +818,41 @@ function handleMouseMove(e) {
   // Get the tooltip element
   const tooltip = document.getElementById('tooltip');
   
-  // Calculate effective tile size
-  const effectiveTileSize = Math.min(
-    canvas.width / gameState.mapSize,
-    canvas.height / gameState.mapSize,
-    tileSize
-  );
+  // Get hexagonal grid size from modules/ui.js
+  const hexSize = 30; // Size of hex (should match the value in ui.js)
   
-  // Calculate grid coordinates
-  const gridX = Math.floor((mouseX + cameraOffsetX) / effectiveTileSize);
-  const gridY = Math.floor((mouseY + cameraOffsetY) / effectiveTileSize);
+  // Convert mouse position to pixel coordinates (adjusted for camera)
+  const pixelX = mouseX + cameraOffsetX;
+  const pixelY = mouseY + cameraOffsetY;
+  
+  // Convert pixel coordinates to axial coordinates
+  const hexCoords = pixelToAxial(pixelX, pixelY, hexSize);
+  
+  // Find the tile at these axial coordinates
+  let gridX = -1;
+  let gridY = -1;
+  const mapSize = gameState.mapSize;
+  
+  // First try to find by axial coordinates
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      const tile = gameState.map[y][x];
+      if (tile.q === hexCoords.q && tile.r === hexCoords.r) {
+        gridX = x;
+        gridY = y;
+        break;
+      }
+    }
+    if (gridX !== -1) break;
+  }
+  
+  // If we couldn't find by axial coordinates (during transition), 
+  // use the axial coordinates as indices if they're in bounds
+  if (gridX === -1 && hexCoords.q >= 0 && hexCoords.q < mapSize && 
+      hexCoords.r >= 0 && hexCoords.r < mapSize) {
+    gridX = hexCoords.q;
+    gridY = hexCoords.r;
+  }
   
   // Show tooltip for tile info
   if (gridX >= 0 && gridX < gameState.mapSize && gridY >= 0 && gridY < gameState.mapSize) {
@@ -635,7 +929,7 @@ function revealTile(x, y) {
   showNotification(`Area revealed at (${x}, ${y})`);
 }
 
-// Handle clicks on the game canvas
+// Handle clicks on the game canvas with hex grid support
 function handleCanvasClick(e) {
   if (!gameStarted) return;
   
@@ -643,19 +937,45 @@ function handleCanvasClick(e) {
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
   
-  // Calculate effective tile size 
-  const effectiveTileSize = Math.min(
-    canvas.width / gameState.mapSize,
-    canvas.height / gameState.mapSize,
-    tileSize
-  );
+  // Get hex grid size for calculations
+  const hexSize = 30; // Should match the size in ui.js
   
-  const gridX = Math.floor((clickX + cameraOffsetX) / effectiveTileSize);
-  const gridY = Math.floor((clickY + cameraOffsetY) / effectiveTileSize);
+  // Convert mouse position to pixel coordinates (adjusted for camera)
+  const pixelX = clickX + cameraOffsetX;
+  const pixelY = clickY + cameraOffsetY;
+  
+  // Convert pixel coordinates to axial coordinates
+  const hexCoords = pixelToAxial(pixelX, pixelY, hexSize);
+  
+  // Find the tile at these axial coordinates
+  let gridX = -1;
+  let gridY = -1;
+  const mapSize = gameState.mapSize;
+  
+  // Search for the tile with matching axial coordinates
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      const tile = gameState.map[y][x];
+      if (tile.q === hexCoords.q && tile.r === hexCoords.r) {
+        gridX = x;
+        gridY = y;
+        break;
+      }
+    }
+    if (gridX !== -1) break;
+  }
+  
+  // If we couldn't find by axial coordinates (during transition), 
+  // use the axial coordinates as indices if they're in bounds
+  if (gridX === -1 && hexCoords.q >= 0 && hexCoords.q < mapSize && 
+      hexCoords.r >= 0 && hexCoords.r < mapSize) {
+    gridX = hexCoords.q;
+    gridY = hexCoords.r;
+  }
   
   // Ensure valid grid position
   if (gridX < 0 || gridX >= gameState.mapSize || gridY < 0 || gridY >= gameState.mapSize) return;
-  
+
   const clickedTile = gameState.map[gridY][gridX];
   
   // Skip interaction with undiscovered tiles - fog only disappears when a unit uncovers it
@@ -669,6 +989,21 @@ function handleCanvasClick(e) {
     buildStructure(gameState, gridX, gridY);
     renderGame();
     return;
+  }
+  
+  // If the user clicks on a different tile or empty space, remove any existing building suggestion
+  const existingSuggestion = document.querySelector('.building-suggestion');
+  if (existingSuggestion) {
+    existingSuggestion.remove();
+  }
+  
+  // Only show building suggestion if:
+  // 1. The tile has no buildings or buildings in progress
+  // 2. AND either no unit is present OR the user has clicked on the same unit twice (double click)
+  const isDoubleClickOnUnit = clickedTile.unit && clickedTile.unit === selectedUnit;
+  
+  if (!clickedTile.building && !clickedTile.buildingInProgress && (!clickedTile.unit || isDoubleClickOnUnit)) {
+    showBuildingSuggestion(clickedTile, gridX, gridY);
   }
   
   // Hide unit action container when deselecting
@@ -1114,6 +1449,412 @@ window.skipUnitTurn = () => {
   }
 };
 
+// Show recommended buildings based on tile resources
+function showBuildingSuggestion(tile, x, y) {
+  console.log("showBuildingSuggestion called", { tile, x, y });
+  if (!tile || tile.building || tile.buildingInProgress) {
+    console.log("Tile not suitable for building:", { 
+      hasTile: !!tile, 
+      hasBuilding: tile ? !!tile.building : 'N/A', 
+      hasBuildingInProgress: tile ? !!tile.buildingInProgress : 'N/A'
+    });
+    return;
+  }
+  
+  // Get the terrain and resource types
+  const tileType = tile.type;
+  const resourceType = tile.resourceType;
+  const resourceAmount = tile.resourceAmount;
+  
+  // Debug logging to understand what tile data we're working with
+  console.log("Tile clicked:", {
+    position: { x, y },
+    tileType: tileType,
+    resourceType: resourceType,
+    resourceAmount: resourceAmount,
+    tile: JSON.stringify(tile)
+  });
+  
+  // Get player's current age and tech level
+  const player = gameState.players[gameState.currentPlayer - 1];
+  const playerAge = player.age;
+  const ageIndex = gameState.ages.indexOf(playerAge);
+  
+  // Create UI for building suggestions
+  const suggestionDiv = document.createElement('div');
+  suggestionDiv.className = 'building-suggestion';
+  
+  // Title and header
+  let headerHTML = `<h3>Recommended Buildings</h3>`;
+  
+  // Description for the tile
+  let tileDescription = "Select a building type that suits this terrain:";
+  
+  // Determine recommended buildings based on terrain and resource
+  const recommendations = [];
+  
+  // Mapping of terrain types to their common appearances based on color
+  const terrainAppearanceMap = {
+    // Green tiles are usually plains (and can support farms)
+    'plains': [
+      {
+        type: 'farm',
+        desc: 'Farms can be built on plains and grasslands to produce food.',
+        importance: 'high',
+        color: '#8BC34A'
+      },
+      {
+        type: 'house',
+        desc: 'Houses provide shelter and increase population capacity.',
+        importance: 'medium',
+        color: '#4CAF50'
+      }
+    ],
+    
+    // Dark green tiles are usually forests
+    'forest': [
+      {
+        type: 'logging_camp',
+        desc: 'Logging camps harvest wood from forests.',
+        importance: 'high',
+        color: '#33691E'
+      },
+      {
+        type: 'hunters_hut',
+        desc: 'Hunter\'s huts gather food from wildlife in forests.',
+        importance: 'medium',
+        color: '#795548'
+      }
+    ],
+    
+    // Brown/gray tiles are usually hills or mountains
+    'hills': [
+      {
+        type: 'quarry',
+        desc: 'Quarries extract stone and minerals from hills.',
+        importance: 'high',
+        color: '#795548'
+      },
+      {
+        type: 'lookout_tower',
+        desc: 'Lookout towers provide enhanced visibility from high ground.',
+        importance: 'low',
+        color: '#9E9E9E'
+      }
+    ],
+    
+    // Gray/dark gray tiles are usually mountains
+    'mountain': [
+      {
+        type: 'mine',
+        desc: 'Mines extract valuable resources from mountains.',
+        importance: 'high',
+        color: '#9E9E9E'
+      }
+    ],
+    
+    // Yellow/tan tiles are usually deserts
+    'desert': [
+      {
+        type: 'trading_post',
+        desc: 'Trading posts can be built in deserts for trade routes.',
+        importance: 'medium',
+        color: '#FFC107'
+      },
+      {
+        type: 'outpost',
+        desc: 'Outposts provide military advantages in open terrain.',
+        importance: 'low',
+        color: '#FFD54F'
+      }
+    ],
+    
+    // Blue tiles are usually water
+    'water': [
+      {
+        type: 'fishing_dock',
+        desc: 'Fishing docks can be built on water tiles to gather food.',
+        importance: 'high',
+        color: '#2196F3'
+      },
+      {
+        type: 'port',
+        desc: 'Ports enable naval trade and unit creation.',
+        importance: 'medium',
+        color: '#03A9F4'
+      },
+      {
+        type: 'dockyard',
+        desc: 'Dockyards build and maintain naval vessels.',
+        importance: 'medium',
+        color: '#0288D1'
+      }
+    ],
+    
+    // Light blue tiles are usually rivers
+    'river': [
+      {
+        type: 'water_mill',
+        desc: 'Water mills use river power for production.',
+        importance: 'high',
+        color: '#87CEEB'
+      },
+      {
+        type: 'bridge',
+        desc: 'Bridges allow units to cross rivers more easily.',
+        importance: 'medium',
+        color: '#81D4FA'
+      }
+    ],
+    
+    // Light blue/white tiles are usually tundra
+    'tundra': [
+      {
+        type: 'hunters_hut',
+        desc: 'Hunter\'s huts can gather resources in cold regions.',
+        importance: 'high',
+        color: '#E0FFFF'
+      }
+    ]
+  };
+  
+  // Add all possible building types for the current terrain
+  if (tileType === 'water' || tileType === 'ocean' || tileType === 'lake' || tileType === 'sea') {
+    // For any water-type tile, recommend water-specific buildings
+    recommendations.push(...terrainAppearanceMap['water']);
+    
+    tileDescription = "This water tile is suitable for ports, fishing docks, and other naval structures.";
+  } 
+  else if (tileType === 'plains') {
+    // Add plains buildings
+    recommendations.push(...terrainAppearanceMap['plains']);
+    
+    // Based on visual inspection, offer forest buildings too since some plains might look like forests
+    recommendations.push(...terrainAppearanceMap['forest']);
+    
+    // If there are water tiles nearby, offer water-related buildings as well
+    const hasWaterNearby = checkForWaterTilesNearby(x, y);
+    if (hasWaterNearby) {
+      recommendations.push(...terrainAppearanceMap['water']);
+      tileDescription += " There's water nearby, so naval structures are also an option.";
+    }
+  } 
+  else if (tileType === 'forest') {
+    // Add forest-specific buildings
+    recommendations.push(...terrainAppearanceMap['forest']);
+    tileDescription = "This forested area is ideal for logging and hunting structures.";
+  }
+  else if (tileType === 'mountain' || tileType === 'hills') {
+    // Mountain or hills terrain
+    const terrainKey = tileType === 'mountain' ? 'mountain' : 'hills';
+    recommendations.push(...terrainAppearanceMap[terrainKey]);
+    tileDescription = `This ${tileType} terrain is ideal for mining and quarrying operations.`;
+  }
+  else if (terrainAppearanceMap[tileType]) {
+    // If tile type is directly matched for any other terrain, use those recommendations
+    recommendations.push(...terrainAppearanceMap[tileType]);
+  }
+  else {
+    // For any unrecognized terrain, default to basic recommendations
+    recommendations.push(...terrainAppearanceMap['plains']);
+    console.log(`Unrecognized terrain type: ${tileType}, defaulting to plains recommendations`);
+  }
+  
+  // If there's a specific resource on this tile, prioritize resource extractors
+  if (resourceType && resourceTileTypes[resourceType]) {
+    const resourceInfo = resourceTileTypes[resourceType];
+    if (resourceInfo.buildingType) {
+      // Insert at the beginning of recommendations to prioritize
+      recommendations.unshift({
+        type: resourceInfo.buildingType,
+        desc: resourceInfo.description || `Extract ${resourceType} resources.`,
+        importance: 'critical',
+        color: '#673AB7' // Purple for resource buildings
+      });
+      
+      tileDescription = `This tile contains ${resourceType} resources. Building a specialized structure will extract them efficiently.`;
+    }
+  }
+  
+  // Generate HTML for building options
+  let optionsHTML = '';
+  
+  // Filter to show only buildings available in current age
+  const availableRecommendations = recommendations.filter(rec => {
+    const buildingInfo = buildingTypes[rec.type];
+    return buildingInfo && (!buildingInfo.age || gameState.ages.indexOf(buildingInfo.age) <= ageIndex);
+  });
+  
+  if (availableRecommendations.length === 0) {
+    // If no specific recommendations, show default building options
+    availableRecommendations.push({
+      type: 'farm',
+      desc: 'General purpose farm for food production.',
+      importance: 'medium',
+      color: '#8BC34A'
+    });
+    
+    availableRecommendations.push({
+      type: 'house',
+      desc: 'Basic housing to increase population capacity.',
+      importance: 'medium',
+      color: '#4CAF50'
+    });
+  }
+  
+  // Sort by importance
+  const importanceValues = {
+    'critical': 4,
+    'high': 3,
+    'medium': 2,
+    'low': 1
+  };
+  
+  availableRecommendations.sort((a, b) => 
+    importanceValues[b.importance] - importanceValues[a.importance]
+  );
+  
+  // Generate building cards
+  availableRecommendations.forEach(rec => {
+    const buildingInfo = buildingTypes[rec.type];
+    if (!buildingInfo) return;
+    
+    // Format costs for display
+    let costText = '';
+    if (buildingInfo.cost) {
+      for (const resource in buildingInfo.cost) {
+        costText += `${buildingInfo.cost[resource]} ${resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}, `;
+      }
+      costText = costText.slice(0, -2); // Remove trailing comma
+    }
+    
+    // Check if player can afford it
+    let canAfford = true;
+    for (const resource in buildingInfo.cost) {
+      if (!player.resources[resource] || player.resources[resource] < buildingInfo.cost[resource]) {
+        canAfford = false;
+        break;
+      }
+    }
+    
+    // Importance indicator
+    const importanceColors = {
+      'critical': '#B71C1C', // Dark red
+      'high': '#FFA000',     // Orange
+      'medium': '#388E3C',   // Green
+      'low': '#1976D2'       // Blue
+    };
+    
+    const importanceColor = importanceColors[rec.importance] || '#757575';
+    
+    optionsHTML += `
+      <div class="building-option" style="border-left-color: ${importanceColor};">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h4>${rec.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
+          <div class="importance-tag importance-${rec.importance}">${rec.importance.toUpperCase()}</div>
+        </div>
+        <p>${rec.desc}</p>
+        <div class="building-cost">Cost: ${costText || 'Free'}</div>
+        <button class="build-option" data-building="${rec.type}" ${!canAfford ? 'disabled' : ''}>
+          ${canAfford ? 'Build Now' : 'Cannot Afford'}
+        </button>
+      </div>
+    `;
+  });
+  
+  // Assemble the complete suggestion UI
+  suggestionDiv.innerHTML = `
+    ${headerHTML}
+    <p>${tileDescription}</p>
+    ${optionsHTML}
+    <div style="text-align: center; margin-top: 15px;">
+      <button id="close-suggestion">Cancel</button>
+    </div>
+  `;
+  
+  // Remove any existing suggestion
+  const existingSuggestion = document.querySelector('.building-suggestion');
+  if (existingSuggestion) {
+    existingSuggestion.remove();
+  }
+  
+  // Add the suggestion to the document
+  document.body.appendChild(suggestionDiv);
+  
+  // Make the suggestion box draggable
+  makeDraggable(suggestionDiv);
+  
+  // Add event listeners to all build buttons
+  document.querySelectorAll('.build-option').forEach(button => {
+    button.addEventListener('click', () => {
+      const buildingType = button.getAttribute('data-building');
+      startBuilding(gameState, buildingType);
+      suggestionDiv.remove();
+    });
+  });
+  
+  // Add event listener to close button
+  document.getElementById('close-suggestion').addEventListener('click', () => {
+    suggestionDiv.remove();
+  });
+  
+  // Add a small hint about draggability
+  const dragHint = document.createElement('div');
+  dragHint.style.position = 'absolute';
+  dragHint.style.top = '8px';
+  dragHint.style.right = '8px';
+  dragHint.style.fontSize = '10px';
+  dragHint.style.color = '#718096';
+  dragHint.textContent = 'Drag to move';
+  dragHint.style.cursor = 'move';
+  suggestionDiv.appendChild(dragHint);
+}
+
+/**
+ * Check if there are water tiles near the given location
+ * @param {Number} x - X coordinate to check
+ * @param {Number} y - Y coordinate to check
+ * @returns {Boolean} - True if water is found within 2 tiles
+ */
+function checkForWaterTilesNearby(x, y) {
+  // Check in a 5x5 area around the position
+  const radius = 2;
+  
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const checkX = x + dx;
+      const checkY = y + dy;
+      
+      // Skip if out of bounds
+      if (checkX < 0 || checkY < 0 || 
+          checkX >= gameState.mapSize || 
+          checkY >= gameState.mapSize) {
+        continue;
+      }
+      
+      const tile = gameState.map[checkY][checkX];
+      
+      // Check for water tiles
+      if (tile.type === 'water' || tile.type === 'river' || 
+          tile.type === 'ocean' || tile.type === 'lake') {
+        return true;
+      }
+      
+      // Check blue color indicators in tile properties
+      if (tile.color && (
+          tile.color === '#2196F3' || 
+          tile.color === '#03A9F4' || 
+          tile.color === '#00BCD4' ||
+          tile.color === '#87CEEB' ||
+          tile.color === '#81D4FA')) {
+        return true;  
+      }
+    }
+  }
+  
+  return false;
+}
+
 // Building category filter
 window.filterBuildingsByCategory = () => {
   const category = document.getElementById('buildingCategoryFilter').value;
@@ -1248,6 +1989,104 @@ window.startNewGameFromUI = function() {
     console.log("New game cancelled by user");
   }
 };
+
+// Make an element draggable
+function makeDraggable(element) {
+  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+  
+  // Ensure element is properly positioned for dragging
+  if (window.getComputedStyle(element).position === 'static') {
+    element.style.position = 'fixed';
+  }
+  
+  // Remove any initial animation to avoid conflicts
+  setTimeout(() => {
+    element.style.animation = 'none';
+  }, 300); // Wait for initial animation to complete
+  
+  // Find header element for drag handle
+  const header = element.querySelector('h3') || element;
+  
+  // Add visual cues for draggable element
+  header.style.cursor = 'move';
+  header.style.userSelect = 'none';
+  header.style.touchAction = 'none'; // Better touch support
+  
+  // Add a grab indicator to the header
+  const dragIndicator = document.createElement('div');
+  dragIndicator.textContent = '≡';
+  dragIndicator.style.position = 'absolute';
+  dragIndicator.style.top = '8px';
+  dragIndicator.style.left = '10px';
+  dragIndicator.style.fontSize = '16px';
+  dragIndicator.style.color = '#718096';
+  dragIndicator.style.cursor = 'move';
+  header.appendChild(dragIndicator);
+  
+  // Setup event listeners
+  header.onmousedown = dragMouseDown;
+  
+  function dragMouseDown(e) {
+    e = e || window.event;
+    e.preventDefault();
+    
+    // Get the mouse cursor position at startup
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    
+    // Add active states
+    header.style.backgroundColor = '#f8f9fa';
+    
+    // Register events for drag and release
+    document.onmouseup = closeDragElement;
+    document.onmousemove = elementDrag;
+    
+    console.log("Drag started"); // Debug logging
+  }
+
+  function elementDrag(e) {
+    e = e || window.event;
+    e.preventDefault();
+    
+    // Calculate the new cursor position
+    pos1 = pos3 - e.clientX;
+    pos2 = pos4 - e.clientY;
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    
+    // Get current position
+    const rect = element.getBoundingClientRect();
+    
+    // Set the element's new position, ensuring it stays within viewport
+    const newTop = rect.top - pos2;
+    const newLeft = rect.left - pos1;
+    
+    // Check boundaries to keep within viewport (with small buffer)
+    const buffer = 20;
+    const maxX = window.innerWidth - rect.width - buffer;
+    const maxY = window.innerHeight - rect.height - buffer;
+    
+    // Apply new position
+    element.style.top = Math.max(buffer, Math.min(maxY, newTop)) + 'px';
+    element.style.left = Math.max(buffer, Math.min(maxX, newLeft)) + 'px';
+    
+    // Force right:auto to prevent conflicts with initial positioning
+    element.style.right = 'auto';
+    
+    console.log("Dragging: ", element.style.top, element.style.left); // Debug logging
+  }
+
+  function closeDragElement() {
+    // Remove active states
+    header.style.backgroundColor = '';
+    
+    // Stop moving when mouse button is released
+    document.onmouseup = null;
+    document.onmousemove = null;
+    
+    console.log("Drag ended"); // Debug logging
+  }
+}
 
 // Setup keyboard shortcuts
 function setupKeyboardShortcuts() {

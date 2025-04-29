@@ -1,6 +1,88 @@
 // Map sizes will be determined by settings rather than fixed constants
 const DEFAULT_MAP_SIZE = 30;
 
+// Hex grid constants and utility functions
+const HEX_SIZE = 30; // Size of hexagon (distance from center to corner)
+
+/**
+ * Convert axial coordinates (q,r) to pixel coordinates (x,y)
+ * @param {Number} q - Q axial coordinate
+ * @param {Number} r - R axial coordinate
+ * @param {Number} size - Size of hex (distance from center to corner)
+ * @returns {Object} - {x, y} pixel coordinates
+ */
+export function axialToPixel(q, r, size = HEX_SIZE) {
+  const x = size * Math.sqrt(3) * (q + r/2);
+  const y = size * 3/2 * r;
+  return {x, y};
+}
+
+/**
+ * Convert pixel coordinates (x,y) to axial coordinates (q,r)
+ * @param {Number} x - X pixel coordinate
+ * @param {Number} y - Y pixel coordinate
+ * @param {Number} size - Size of hex (distance from center to corner)
+ * @returns {Object} - {q, r} axial coordinates (rounded to nearest hex)
+ */
+export function pixelToAxial(x, y, size = HEX_SIZE) {
+  const q_float = (x * Math.sqrt(3)/3 - y/3) / size;
+  const r_float = y * 2/3 / size;
+  return roundToHex(q_float, r_float);
+}
+
+/**
+ * Helper function to round floating point axial coordinates to the nearest hex
+ * @param {Number} q - Q axial coordinate (floating point)
+ * @param {Number} r - R axial coordinate (floating point)
+ * @returns {Object} - {q, r} axial coordinates (rounded integers)
+ */
+function roundToHex(q, r) {
+  // Convert to cube coordinates for rounding
+  let x = q;
+  let z = r;
+  let y = -x - z;
+  
+  // Round cube coordinates
+  let rx = Math.round(x);
+  let ry = Math.round(y);
+  let rz = Math.round(z);
+  
+  // Fix rounding errors
+  const x_diff = Math.abs(rx - x);
+  const y_diff = Math.abs(ry - y);
+  const z_diff = Math.abs(rz - z);
+  
+  if (x_diff > y_diff && x_diff > z_diff) {
+    rx = -ry - rz;
+  } else if (y_diff > z_diff) {
+    ry = -rx - rz;
+  } else {
+    rz = -rx - ry;
+  }
+  
+  // Convert back to axial coordinates
+  return {q: rx, r: rz};
+}
+
+/**
+ * Get all neighboring axial coordinates for a given hex
+ * @param {Number} q - Q axial coordinate
+ * @param {Number} r - R axial coordinate
+ * @returns {Array} - Array of {q, r} neighbor coordinates
+ */
+function getHexNeighbors(q, r) {
+  // Six directions for a hexagonal grid using axial coordinates
+  const directions = [
+    {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
+    {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
+  ];
+  
+  return directions.map(dir => ({
+    q: q + dir.q,
+    r: r + dir.r
+  }));
+}
+
 import { 
   resourcesByAge, 
   getSimpleResourcesByAge, 
@@ -12,21 +94,50 @@ import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
 
 /**
- * Create the base terrain using simplified noise
+ * Create the base terrain using hex axial coordinates
  * @param {Object} gameState - The game state
  */
 function createBaseTerrain(gameState) {
   const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   const mapType = gameState.mapType || 'continents';
   
-  // Initialize the map with plains
-  for (let y = 0; y < mapSize; y++) {
+  console.log(`Creating base terrain for map type: ${mapType}, size: ${mapSize}`);
+  
+  // For hexagonal grids, we need to adjust the coordinates to create a more balanced map shape
+  const adjustedWidth = mapSize;
+  const adjustedHeight = mapSize;
+  
+  // Calculate the offset for centering the hex grid (optional)
+  const centerOffsetQ = Math.floor(adjustedWidth / 2);
+  const centerOffsetR = Math.floor(adjustedHeight / 2);
+  
+  // Initialize the map with proper hexagonal grid coordinates
+  for (let r = -centerOffsetR; r < adjustedHeight - centerOffsetR; r++) {
     const row = [];
-    for (let x = 0; x < mapSize; x++) {
+    // In axial coordinates, q can range from -centerOffset to width-centerOffset
+    // We need to adjust the q range for each row to create a proper hex grid shape
+    const qStart = Math.max(-centerOffsetQ, -r - centerOffsetQ);
+    const qEnd = Math.min(adjustedWidth - centerOffsetQ, adjustedWidth - centerOffsetQ - r);
+    
+    for (let q = qStart; q < qEnd; q++) {
+      // Convert axial to array indices (keeping positive for array indexing)
+      const arrayX = q + centerOffsetQ;
+      const arrayY = r + centerOffsetR;
+      
+      // Calculate pixel coordinates for rendering
+      const pixelCoords = axialToPixel(q, r);
+      
       row.push({ 
-        type: 'plains', 
-        x: x, 
-        y: y, 
+        type: 'plains',
+        // Store array indices for backward compatibility and array access
+        x: arrayX, 
+        y: arrayY,
+        // Store canonical axial coordinates for hex grid
+        q: q,
+        r: r,
+        // Store pixel coordinates for rendering
+        pixelX: pixelCoords.x,
+        pixelY: pixelCoords.y,
         unit: null, 
         building: null,
         discovered: [false, false],
@@ -41,6 +152,7 @@ function createBaseTerrain(gameState) {
   // Generate terrain based on selected map type
   switch(mapType) {
     case 'archipelago':
+      console.log("Starting archipelago map generation...");
       generateArchipelagoMap(gameState);
       break;
     case 'pangaea':
@@ -53,6 +165,7 @@ function createBaseTerrain(gameState) {
       generateDesertMap(gameState);
       break;
     default:
+      console.log("Using default continents map generation");
       generateContinentsMap(gameState); // Default map type
   }
 }
@@ -117,33 +230,183 @@ function generateContinentsMap(gameState) {
 function generateArchipelagoMap(gameState) {
   const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   
-  // Fill most of the map with water
-  for (let y = 0; y < mapSize; y++) {
-    for (let x = 0; x < mapSize; x++) {
-      if (Math.random() < 0.75) { // 75% of the map is water
+  console.log("Generating archipelago (island) map of size: " + mapSize);
+  
+  try {
+    // MANDATORY - FIRST MAKE THE ENTIRE MAP WATER
+    console.log("Setting entire map to water");
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
         gameState.map[y][x].type = 'water';
       }
     }
-  }
-  
-  // Create islands
-  const islandCount = Math.floor(mapSize / 3);
-  for (let i = 0; i < islandCount; i++) {
-    const x = Math.floor(Math.random() * mapSize);
-    const y = Math.floor(Math.random() * mapSize);
-    const islandSize = 2 + Math.floor(Math.random() * 3);
     
-    // Create land
-    createTerrainFeature(gameState.map, x, y, islandSize, 'plains', mapSize);
+    // Count water tiles to verify
+    let waterTiles = 0;
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
+        if (gameState.map[y][x].type === 'water') {
+          waterTiles++;
+        }
+      }
+    }
+    console.log(`Initial water tiles: ${waterTiles} out of ${mapSize * mapSize}`);
     
-    // Add some forest to each island
-    if (Math.random() > 0.3) {
-      createTerrainFeature(gameState.map, x, y, islandSize / 2, 'forest', mapSize);
+    // Create small islands
+    const smallIslandCount = Math.floor(mapSize / 2); // More islands
+    console.log(`Creating ${smallIslandCount} small islands`);
+    
+    for (let i = 0; i < smallIslandCount; i++) {
+      const x = Math.floor(Math.random() * mapSize);
+      const y = Math.floor(Math.random() * mapSize);
+      const islandSize = 2 + Math.floor(Math.random() * 3);
+      
+      // Create land (plains) for the island - DIRECTLY SET TILES instead of using createTerrainFeature
+      const radius = islandSize;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          
+          if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance <= radius * 0.8) {
+              // Core island area
+              gameState.map[ny][nx].type = 'plains';
+              
+              // Add forest to some tiles (30% chance)
+              if (Math.random() < 0.3) {
+                gameState.map[ny][nx].type = 'forest';
+              }
+              
+              // Add hills to some tiles (20% chance)
+              if (Math.random() < 0.2) {
+                gameState.map[ny][nx].type = 'hills';
+              }
+            }
+          }
+        }
+      }
+      
+      // Verify this island was created by counting non-water tiles
+      let landTiles = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+            if (gameState.map[ny][nx].type !== 'water') {
+              landTiles++;
+            }
+          }
+        }
+      }
+      console.log(`Island ${i+1}: Created with approximately ${landTiles} land tiles`);
     }
     
-    // Add some mountains to some islands
-    if (Math.random() > 0.6) {
-      createTerrainFeature(gameState.map, x, y, 1, 'mountain', mapSize);
+    // Add a few larger islands (2-4 depending on map size)
+    const largeIslandCount = 2 + Math.floor(mapSize / 20);
+    console.log(`Creating ${largeIslandCount} larger islands`);
+    
+    for (let i = 0; i < largeIslandCount; i++) {
+      const x = Math.floor(Math.random() * mapSize);
+      const y = Math.floor(Math.random() * mapSize);
+      const islandSize = 4 + Math.floor(Math.random() * 5); // Larger islands
+      
+      // Create land for the larger island - DIRECTLY SET TILES
+      const radius = islandSize;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          
+          if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance <= radius) {
+              // Core island area
+              gameState.map[ny][nx].type = 'plains';
+              
+              // Add forest to some tiles (50% chance)
+              if (Math.random() < 0.5) {
+                gameState.map[ny][nx].type = 'forest';
+              }
+              
+              // Add hills to some tiles (25% chance)
+              if (Math.random() < 0.25) {
+                gameState.map[ny][nx].type = 'hills';
+              }
+              
+              // Add mountains to some tiles (10% chance)
+              if (Math.random() < 0.1) {
+                gameState.map[ny][nx].type = 'mountain';
+              }
+            }
+          }
+        }
+      }
+      
+      // Verify this large island was created by counting non-water tiles
+      let landTiles = 0;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+            if (gameState.map[ny][nx].type !== 'water') {
+              landTiles++;
+            }
+          }
+        }
+      }
+      console.log(`Large island ${i+1}: Created with approximately ${landTiles} land tiles`);
+    }
+    
+    // Final verification - count water vs. land tiles
+    let finalWaterTiles = 0;
+    let finalLandTiles = 0;
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
+        if (gameState.map[y][x].type === 'water') {
+          finalWaterTiles++;
+        } else {
+          finalLandTiles++;
+        }
+      }
+    }
+    console.log(`Final map composition: ${finalWaterTiles} water tiles, ${finalLandTiles} land tiles`);
+    console.log(`Water percentage: ${(finalWaterTiles / (mapSize * mapSize) * 100).toFixed(1)}%`);
+  } catch (error) {
+    console.error("Error in archipelago generation:", error);
+    // Emergency fallback - ensure we have some islands
+    try {
+      // Fill with water
+      for (let y = 0; y < mapSize; y++) {
+        for (let x = 0; x < mapSize; x++) {
+          gameState.map[y][x].type = 'water';
+        }
+      }
+      
+      // Create at least a few basic islands
+      for (let i = 0; i < 5; i++) {
+        const x = Math.floor(Math.random() * mapSize);
+        const y = Math.floor(Math.random() * mapSize);
+        
+        // Simple square island
+        const size = 3;
+        for (let dy = -size; dy <= size; dy++) {
+          for (let dx = -size; dx <= size; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize) {
+              gameState.map[ny][nx].type = 'plains';
+            }
+          }
+        }
+      }
+      
+      console.log("Created emergency fallback islands");
+    } catch (fallbackError) {
+      console.error("Critical error in fallback island generation:", fallbackError);
     }
   }
 }
@@ -319,7 +582,7 @@ function generateDesertMap(gameState) {
 }
 
 /**
- * Create a terrain feature using a simple cellular automata approach
+ * Create a terrain feature using a hexagonal approach
  * @param {Array} map - The game map
  * @param {Number} centerX - X coordinate of the feature center
  * @param {Number} centerY - Y coordinate of the feature center
@@ -333,23 +596,72 @@ function createTerrainFeature(map, centerX, centerY, size, terrainType, mapSize)
     map[centerY][centerX].type = terrainType;
   }
   
-  // Create a cloud of terrain around the center
-  for (let i = 0; i < size * 3; i++) {
-    // Random point around the center
-    const offsetX = Math.floor(Math.random() * size * 2) - size;
-    const offsetY = Math.floor(Math.random() * size * 2) - size;
+  // Get the center tile's axial coordinates if available
+  let centerQ, centerR;
+  if (map[centerY][centerX].q !== undefined && map[centerY][centerX].r !== undefined) {
+    centerQ = map[centerY][centerX].q;
+    centerR = map[centerY][centerX].r;
+  } else {
+    // Fallback if axial coordinates aren't available
+    centerQ = centerX;
+    centerR = centerY;
+  }
+  
+  // Create a cloud of terrain around the center using axial coordinates
+  for (let i = 0; i < size * 6; i++) {  // More iterations for better coverage
+    // Random offset in axial space
+    // For proper hex distribution, we need to use axial offsets
+    const offsetQ = Math.floor(Math.random() * size * 2) - size;
+    const offsetR = Math.floor(Math.random() * size * 2) - size;
     
-    const x = centerX + offsetX;
-    const y = centerY + offsetY;
+    const targetQ = centerQ + offsetQ;
+    const targetR = centerR + offsetR;
     
-    // Check if coordinates are within bounds
-    if (x >= 0 && x < mapSize && y >= 0 && y < mapSize) {
-      // Distance from center affects probability
-      const dist = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
-      const probability = 1 - (dist / size);
+    // Find the corresponding tile with these axial coordinates
+    let targetTile = null;
+    let targetX = -1, targetY = -1;
+    
+    // Find the tile with matching q,r coordinates
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
+        if (map[y][x].q === targetQ && map[y][x].r === targetR) {
+          targetTile = map[y][x];
+          targetX = x;
+          targetY = y;
+          break;
+        }
+      }
+      if (targetTile) break;
+    }
+    
+    // If no tile was found with those exact coordinates (common during transition)
+    // then try using array indices if they're in bounds
+    if (!targetTile && targetQ >= 0 && targetQ < mapSize && targetR >= 0 && targetR < mapSize) {
+      try {
+        // During transition, q,r might be used as direct array indices
+        targetTile = map[targetR][targetQ];
+        targetX = targetQ;
+        targetY = targetR;
+      } catch (e) {
+        // Skip if out of bounds
+        continue;
+      }
+    }
+    
+    // If we found a valid tile
+    if (targetTile) {
+      // Calculate hex distance from center
+      const hexDist = (
+        Math.abs(centerQ - targetQ) + 
+        Math.abs(centerR - targetR) + 
+        Math.abs(centerQ + centerR - targetQ - targetR)
+      ) / 2;
+      
+      // Distance affects probability (more gradual falloff for hex grid)
+      const probability = 1 - (hexDist / (size * 1.5));
       
       if (Math.random() < probability) {
-        map[y][x].type = terrainType;
+        map[targetY][targetX].type = terrainType;
       }
     }
   }
@@ -402,46 +714,57 @@ function addRoads(gameState) {
   const startPositions = gameState.startingPositions;
   if (!startPositions || startPositions.length < 2) return;
   
-  // Create roads between starting positions
-  for (let i = 0; i < startPositions.length - 1; i++) {
-    const from = startPositions[i];
-    
-    // Connect to the next position
-    const to = startPositions[i + 1];
-    
-    // Create road between these two positions
-    const path = findPath(map, from.x, from.y, to.x, to.y, mapSize);
-    
-    // Create roads along the path
-    for (const point of path) {
-      // Only place roads on land
-      if (map[point.y][point.x].type !== 'water' && 
-          map[point.y][point.x].type !== 'mountain') {
-        map[point.y][point.x].type = 'road';
-      }
-    }
-  }
-  
-  // For more than 2 players, create a central road network connecting all start positions
-  if (activePlayerCount > 2) {
-    // Find center of the map
-    const centerX = Math.floor(mapSize / 2);
-    const centerY = Math.floor(mapSize / 2);
-    
-    // Connect each starting position to the center
-    for (let i = 0; i < startPositions.length; i++) {
-      const pos = startPositions[i];
-      const path = findPath(map, pos.x, pos.y, centerX, centerY, mapSize);
+  try {
+    // Create roads between starting positions
+    for (let i = 0; i < startPositions.length - 1; i++) {
+      const from = startPositions[i];
+      if (!from) continue;
+      
+      // Connect to the next position
+      const to = startPositions[i + 1];
+      if (!to) continue;
+      
+      // Create road between these two positions
+      const path = findPath(map, from.x, from.y, to.x, to.y, mapSize);
       
       // Create roads along the path
       for (const point of path) {
-        // Only place roads on land
-        if (map[point.y][point.x].type !== 'water' && 
+        // Only place roads on land if point exists and coordinates are valid
+        if (point && map[point.y] && map[point.y][point.x] &&
+            map[point.y][point.x].type !== 'water' && 
             map[point.y][point.x].type !== 'mountain') {
           map[point.y][point.x].type = 'road';
         }
       }
     }
+    
+    // For more than 2 players, create a central road network connecting all start positions
+    if (activePlayerCount > 2) {
+      // Find center of the map
+      const centerX = Math.floor(mapSize / 2);
+      const centerY = Math.floor(mapSize / 2);
+      
+      // Connect each starting position to the center
+      for (let i = 0; i < startPositions.length; i++) {
+        const pos = startPositions[i];
+        if (!pos) continue;
+        
+        const path = findPath(map, pos.x, pos.y, centerX, centerY, mapSize);
+        
+        // Create roads along the path
+        for (const point of path) {
+          // Only place roads on land if point exists and coordinates are valid
+          if (point && map[point.y] && map[point.y][point.x] &&
+              map[point.y][point.x].type !== 'water' && 
+              map[point.y][point.x].type !== 'mountain') {
+            map[point.y][point.x].type = 'road';
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error adding roads:", error);
+    // Skip road creation if there's an error, but don't fail map generation
   }
 }
 
@@ -475,27 +798,46 @@ function findPath(map, startX, startY, endX, endY, mapSize) {
 }
 
 /**
- * Get all surrounding tiles of a given position
+ * Get all surrounding tiles of a given position using hex axial coordinates
  * @param {Array} map - The game map
- * @param {Number} x - X coordinate
- * @param {Number} y - Y coordinate
+ * @param {Number} q - Q axial coordinate
+ * @param {Number} r - R axial coordinate
  * @param {Number} mapSize - Size of the map
  * @returns {Array} - Array of surrounding tiles
  */
-function getSurroundingTiles(map, x, y, mapSize) {
+function getSurroundingTiles(map, q, r, mapSize) {
   const surrounding = [];
+  // Hexagonal grid has six neighbors in these axial directions
   const directions = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1]
+    {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
+    {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
   ];
   
-  for (const [dx, dy] of directions) {
-    const newX = x + dx;
-    const newY = y + dy;
+  for (const dir of directions) {
+    const newQ = q + dir.q;
+    const newR = r + dir.r;
     
-    if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize) {
-      surrounding.push(map[newY][newX]);
+    // Check bounds - for backward compatibility during transition, we'll still use x,y style access
+    // but will update the actual tiles to have q,r properties
+    if (newQ >= 0 && newQ < mapSize && newR >= 0 && newR < mapSize) {
+      // Try to find the tile with matching q,r coordinates
+      // During transition we need to handle both old and new coordinate systems
+      let found = false;
+      for (let y = 0; y < mapSize; y++) {
+        for (let x = 0; x < mapSize; x++) {
+          if (map[y][x].q === newQ && map[y][x].r === newR) {
+            surrounding.push(map[y][x]);
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+      
+      // Fallback for maps that haven't been fully converted
+      if (!found && newR < mapSize && newQ < mapSize) {
+        surrounding.push(map[newR][newQ]);
+      }
     }
   }
   
@@ -691,27 +1033,59 @@ function finalizeMap(gameState) {
 
 // Complete map generation process
 export function generateMap(gameState) {
-  gameState.map = [];
-  
-  // Create base terrain
-  createBaseTerrain(gameState);
-  
-  // Structure the terrain
-  structureTerrain(gameState);
-  
-  // Create resource hotspots
-  createResourceHotspots(gameState);
-  
-  // Place starting positions and ensure they're suitable
-  placeStartingPositions(gameState);
-  
-  // Add resource nodes appropriate for the initial age
-  addResourceNodes(gameState);
-  
-  // Place HQs and units
-  finalizeMap(gameState);
-  
-  return gameState;
+  try {
+    gameState.map = [];
+    
+    // Create base terrain
+    createBaseTerrain(gameState);
+    
+    // Structure the terrain
+    structureTerrain(gameState);
+    
+    // Create resource hotspots
+    createResourceHotspots(gameState);
+    
+    // Place starting positions and ensure they're suitable
+    placeStartingPositions(gameState);
+    
+    // Try to add roads - wrapped in try/catch so it doesn't fail the whole map generation
+    try {
+      addRoads(gameState);
+    } catch (roadError) {
+      console.error("Error adding roads:", roadError);
+      // Continue with map generation even if roads fail
+    }
+    
+    // Add resource nodes appropriate for the initial age
+    addResourceNodes(gameState);
+    
+    // Place HQs and units
+    finalizeMap(gameState);
+    
+    return gameState;
+  } catch (error) {
+    console.error("Error in map generation:", error);
+    // Return a basic empty map as fallback
+    gameState.map = [];
+    for (let y = 0; y < (gameState.mapSize || DEFAULT_MAP_SIZE); y++) {
+      const row = [];
+      for (let x = 0; x < (gameState.mapSize || DEFAULT_MAP_SIZE); x++) {
+        row.push({ 
+          type: 'plains', 
+          x: x, 
+          y: y, 
+          unit: null, 
+          building: null,
+          discovered: [true, true], // Make all visible for debugging
+          resourceAmount: 0,
+          resourceQuality: 'standard',
+          hotspot: false
+        });
+      }
+      gameState.map.push(row);
+    }
+    return gameState;
+  }
 }
 
 /**
@@ -1017,14 +1391,36 @@ function determineResourceQuality(inHotspot, resourceDensity = 'standard') {
   }
 }
 
-// Reveal area around a point
+// Reveal area around a point using hexagonal coordinates
 export function revealArea(gameState, centerX, centerY, radius, playerIndex) {
   const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   
+  // Get q, r coordinates of the center point
+  // During transition, use x, y as q, r for simple mapping
+  const centerQ = gameState.map[centerY][centerX].q || centerX;
+  const centerR = gameState.map[centerY][centerX].r || centerY;
+  
+  // For backward compatibility, use a square-based scanning approach first
   for (let y = centerY - radius; y <= centerY + radius; y++) {
     for (let x = centerX - radius; x <= centerX + radius; x++) {
       if (x >= 0 && y >= 0 && x < mapSize && y < mapSize) {
-        const dist = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+        // Get the tile
+        const tile = gameState.map[y][x];
+        
+        // Get the axial coordinates (q,r)
+        const q = tile.q || x;
+        const r = tile.r || y;
+        
+        // For hex grids, distance is different
+        // In axial coordinates: distance = (abs(q1-q2) + abs(r1-r2) + abs(q1+r1-q2-r2)) / 2
+        const hexDist = (Math.abs(centerQ - q) + Math.abs(centerR - r) + Math.abs(centerQ + centerR - q - r)) / 2;
+        
+        // For backward compatibility, also calculate Euclidean distance
+        const euclideanDist = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+        
+        // Use the appropriate distance based on whether we're fully on hex coordinates
+        const dist = (tile.q !== undefined && tile.r !== undefined) ? hexDist : euclideanDist;
+        
         if (dist <= radius) {
           gameState.map[y][x].discovered[playerIndex] = true;
         }

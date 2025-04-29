@@ -1,0 +1,122 @@
+/* Fix for Actions tab and building menu visibility */
+#actions-tab {
+  overflow-y: auto !important;
+  max-height: 100% !important;
+  padding-bottom: 50px !important;
+}
+
+#buildings-section {
+  display: block !important;
+  visibility: visible !important;
+  margin-top: 20px !important;
+  margin-bottom: 30px !important;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+  background-color: #f8fafc !important;
+  padding: 15px !important;
+  border-radius: 8px !important;
+  border: 2px solid #4a5568 !important;
+}
+
+/* Building menu styles */
+.building-buttons {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  max-height: 400px !important;
+  overflow-y: auto !important;
+  border: 1px solid #cbd5e0 !important;
+  padding: 15px !important;
+  border-radius: 8px !important;
+  background-color: white !important;
+  margin-top: 15px !important;
+}
+
+/* Styling for simple building buttons */
+#simple-building-buttons button {
+  background-color: #4a5568 !important;
+  color: white !important;
+  font-weight: bold !important;
+  width: 100% !important;
+  margin: 5px 0 !important;
+  padding: 12px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+#simple-building-buttons button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+}
+
+/* Farm button */
+#simple-building-buttons button:nth-child(1) {
+  background-color: #68d391 !important;
+  color: #234e52 !important;
+}
+
+/* House button */
+#simple-building-buttons button:nth-child(2) {
+  background-color: #4299e1 !important;
+  color: #2a4365 !important;
+}
+
+/* Logging camp button */
+#simple-building-buttons button:nth-child(3) {
+  background-color: #9ae6b4 !important;
+  color: #234e52 !important;
+}
+
+/* Hunter's hut button */
+#simple-building-buttons button:nth-child(4) {
+  background-color: #fbd38d !important;
+  color: #744210 !important;
+}
+
+/* Building category filter */
+#buildingCategoryFilter {
+  display: block !important;
+  width: 100% !important;
+  padding: 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e0 !important;
+  background-color: white !important;
+  margin: 15px 0 !important;
+  font-size: 16px !important;
+}
+
+/* Make sure the building cards are properly displayed */
+.building-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+  gap: 16px !important;
+}
+
+.building-card {
+  background: white !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  padding: 20px 15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+/* Prevent any element from being hidden by parent scroll containers */
+#ui {
+  overflow-y: auto !important;
+  max-height: 100vh !important;
+}
+
+/* Make building menu loading message more visible */
+#building-menu-loading {
+  padding: 20px !important;
+  text-align: center !important;
+  color: #4a5568 !important;
+  font-weight: bold !important;
+  background-color: #f7fafc !important;
+  border-radius: 8px !important;
+  margin: 10px 0 !important;
+  border: 1px dashed #cbd5e0 !important;
+}

@@ -2,6 +2,7 @@
 import { mapSize } from './constants.js';
 import { generateMap } from './map.js';
 import { toggleFogOfWar, setAIDifficulty } from './gameEvents.js';
+import { countries, getCountryByName } from './countries.js';
 
 /**
  * Generate a new game with selected settings
@@ -21,6 +22,13 @@ export function startNewGame(gameState, settings) {
         gameState.aiDifficulty = settings.aiDifficulty;
         gameState.resourceDensity = settings.resourceDensity;
         gameState.aiPlayerCount = settings.aiPlayerCount || 1; // Default to 1 if not specified
+        
+        // Apply selected country to human player (index 0)
+        if (settings.playerCountry && gameState.players.length > 0) {
+            // Set player faction and update name
+            gameState.players[0].faction = settings.playerCountry.name;
+            gameState.players[0].name = `Player (${settings.playerCountry.flag} ${settings.playerCountry.name})`;
+        }
         
         // Set AI players active or inactive based on selected count
         for (let i = 1; i < gameState.players.length; i++) {
@@ -124,6 +132,16 @@ function createStartMenuUI() {
             <h1>War Game</h1>
             <div class="menu-section">
                 <h2>Game Settings</h2>
+                
+                <div class="setting-group">
+                    <label for="countrySelect">Select Your Country:</label>
+                    <select id="countrySelect">
+                        ${countries.map(country => 
+                            `<option value="${country.name}">${country.flag} ${country.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div id="countryDescription" class="country-description"></div>
                 
                 <div class="setting-group">
                     <label for="mapSizeSelect">Map Size:</label>
@@ -238,6 +256,24 @@ function setupStartMenuHandlers(startGameCallback) {
     // Map preview generation
     document.getElementById('mapTypeSelect').addEventListener('change', updateMapPreview);
     document.getElementById('mapSizeSelect').addEventListener('change', updateMapPreview);
+    
+    // Country selection handler
+    const countrySelect = document.getElementById('countrySelect');
+    const countryDescription = document.getElementById('countryDescription');
+    
+    // Set initial description
+    const initialCountry = getCountryByName(countrySelect.value);
+    if (initialCountry) {
+        countryDescription.textContent = initialCountry.description;
+    }
+    
+    // Update description when selection changes
+    countrySelect.addEventListener('change', () => {
+        const selectedCountry = getCountryByName(countrySelect.value);
+        if (selectedCountry) {
+            countryDescription.textContent = selectedCountry.description;
+        }
+    });
 }
 
 /**
@@ -256,18 +292,30 @@ function getSelectedSettings() {
         case 'huge': mapSize = 50; break;
     }
     
+    // Get map type
+    const mapType = document.getElementById('mapTypeSelect').value;
+    console.log("Selected map type:", mapType); // Debug to confirm selection
+    
     // Get number of AI players
     const aiCount = parseInt(document.getElementById('aiCountSelect').value);
     
+    // Get selected country
+    const countryName = document.getElementById('countrySelect').value;
+    const selectedCountry = getCountryByName(countryName);
+    
     // Compile all settings
-    return {
+    const settings = {
         mapSize: mapSize,
-        mapType: document.getElementById('mapTypeSelect').value,
+        mapType: mapType,
         resourceDensity: document.getElementById('resourceDensitySelect').value,
         aiDifficulty: document.getElementById('aiDifficultySelect').value,
         fogOfWar: document.getElementById('fogOfWarCheck').checked,
-        aiPlayerCount: aiCount
+        aiPlayerCount: aiCount,
+        playerCountry: selectedCountry || countries[0]  // Default to first country if not found
     };
+    
+    console.log("Game settings:", settings); // Log all settings for debugging
+    return settings;
 }
 
 /**

@@ -304,6 +304,12 @@ export function startBuilding(gameState, buildingType) {
 
 // Build a structure at the specified location
 export function buildStructure(gameState, x, y) {
+  // Remove any existing building suggestion UI
+  const existingSuggestion = document.querySelector('.building-suggestion');
+  if (existingSuggestion) {
+    existingSuggestion.remove();
+  }
+  
   if (!gameState.selectedBuildingType) return false;
   
   const player = gameState.players[gameState.currentPlayer - 1];
