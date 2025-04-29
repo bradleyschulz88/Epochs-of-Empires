@@ -174,6 +174,22 @@ function createStartMenuUI() {
                     </select>
                 </div>
                 
+                <div class="setting-group checkbox-group">
+                    <input type="checkbox" id="useNewMapGenerator">
+                    <label for="useNewMapGenerator">Use improved hex map generator</label>
+                    <div class="setting-description">
+                        Uses Perlin noise to create more realistic and varied terrain
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <label for="mapSeedInput">Map Seed (optional):</label>
+                    <input type="number" id="mapSeedInput" placeholder="Random seed" min="0" max="999999">
+                    <div class="setting-description">
+                        Enter a seed number to generate the same map again
+                    </div>
+                </div>
+                
                 <div class="setting-group">
                     <label for="aiCountSelect">Number of AI Players:</label>
                     <select id="aiCountSelect">
@@ -303,6 +319,13 @@ function getSelectedSettings() {
     const countryName = document.getElementById('countrySelect').value;
     const selectedCountry = getCountryByName(countryName);
     
+    // Get map generator setting
+    const useNewMapGenerator = document.getElementById('useNewMapGenerator').checked;
+    
+    // Get map seed (if provided)
+    let mapSeed = document.getElementById('mapSeedInput').value;
+    mapSeed = mapSeed ? parseInt(mapSeed) : Math.floor(Math.random() * 1000000);
+    
     // Compile all settings
     const settings = {
         mapSize: mapSize,
@@ -311,7 +334,9 @@ function getSelectedSettings() {
         aiDifficulty: document.getElementById('aiDifficultySelect').value,
         fogOfWar: document.getElementById('fogOfWarCheck').checked,
         aiPlayerCount: aiCount,
-        playerCountry: selectedCountry || countries[0]  // Default to first country if not found
+        playerCountry: selectedCountry || countries[0],  // Default to first country if not found
+        useNewMapGenerator: useNewMapGenerator,
+        mapSeed: mapSeed
     };
     
     console.log("Game settings:", settings); // Log all settings for debugging

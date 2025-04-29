@@ -1658,12 +1658,17 @@ export function render(gameState, canvasData) {
     mouseX, mouseY, cameraOffsetX, cameraOffsetY 
   } = canvasData;
   
-  // Calculate hex size based on canvas dimensions and map size
+  // Calculate hex size based on canvas dimensions and map radius
+  const mapRadius = gameState.mapRadius || Math.floor(gameState.mapSize / 2);
   const hexSize = Math.min(
-    canvas.width / (gameState.mapSize * 1.5),
-    canvas.height / (gameState.mapSize * 1.5),
-    tileSize / 1.5
+    canvas.width / (mapRadius * 3.5), // Ensure entire map fits
+    canvas.height / (mapRadius * 3.5),
+    tileSize // Use configured tile size as a maximum
   );
+  
+  // Add a visual center offset to position the map in the middle of the screen
+  const centerOffsetX = canvas.width / 2;
+  const centerOffsetY = canvas.height / 2;
   
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);

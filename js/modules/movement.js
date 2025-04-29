@@ -1,7 +1,13 @@
 // Movement System for War Game with Hex Grid Support
 import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
-import { axialToPixel, pixelToAxial } from './map.js';
+import { 
+  HEX_DIRECTIONS, 
+  axialToPixel, 
+  pixelToAxial, 
+  hexDistance, 
+  areHexesAdjacent 
+} from './hexgrid.js';
 
 // Constants for movement
 const ZOC_EXTRA_COST = 1; // Zone of Control additional cost
@@ -223,13 +229,8 @@ function hasAdjacentEnemyUnit(map, x, y, unitOwner) {
     const q = tile.q !== undefined ? tile.q : x;
     const r = tile.r !== undefined ? tile.r : y;
     
-    // Use hexagonal directions for adjacency check
-    const directions = [
-        {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
-        {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
-    ];
-    
-    for (const dir of directions) {
+    // Use the HEX_DIRECTIONS constant from map.js
+    for (const dir of HEX_DIRECTIONS) {
         const newQ = q + dir.q;
         const newR = r + dir.r;
         
@@ -695,11 +696,7 @@ export function getValidMovementLocations(unit, map) {
     const coordKey = unit.q !== undefined ? `${unitQ},${unitR}` : `${unit.x},${unit.y}`;
     visited[coordKey] = true;
     
-    // Define hex directions for axial coordinates
-    const hexDirections = [
-        {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
-        {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
-    ];
+    // Use HEX_DIRECTIONS constant for movement
     
     while (queue.length > 0) {
         const current = queue.shift();
@@ -715,8 +712,8 @@ export function getValidMovementLocations(unit, map) {
             });
         }
         
-        // Check each possible hex direction
-        for (const dir of hexDirections) {
+        // Check each possible hex direction using HEX_DIRECTIONS from map.js
+        for (const dir of HEX_DIRECTIONS) {
             const nextQ = current.q + dir.q;
             const nextR = current.r + dir.r;
             

@@ -1,87 +1,27 @@
+// Import the hex grid module
+import { 
+  createHexGrid,
+  HEX_DIRECTIONS,
+  axialToPixel,
+  pixelToAxial,
+  roundToHex,
+  getHexNeighbors,
+  hexDistance,
+  areHexesAdjacent,
+  findHexByAxial
+} from './hexgrid.js';
+
+// Import the new map generator module
+import { generateMap as generateHexMap } from './mapGenerator.js';
+
 // Map sizes will be determined by settings rather than fixed constants
 const DEFAULT_MAP_SIZE = 30;
 
-// Hex grid constants and utility functions
+// Hex grid constants
 const HEX_SIZE = 30; // Size of hexagon (distance from center to corner)
 
-/**
- * Convert axial coordinates (q,r) to pixel coordinates (x,y)
- * @param {Number} q - Q axial coordinate
- * @param {Number} r - R axial coordinate
- * @param {Number} size - Size of hex (distance from center to corner)
- * @returns {Object} - {x, y} pixel coordinates
- */
-export function axialToPixel(q, r, size = HEX_SIZE) {
-  const x = size * Math.sqrt(3) * (q + r/2);
-  const y = size * 3/2 * r;
-  return {x, y};
-}
-
-/**
- * Convert pixel coordinates (x,y) to axial coordinates (q,r)
- * @param {Number} x - X pixel coordinate
- * @param {Number} y - Y pixel coordinate
- * @param {Number} size - Size of hex (distance from center to corner)
- * @returns {Object} - {q, r} axial coordinates (rounded to nearest hex)
- */
-export function pixelToAxial(x, y, size = HEX_SIZE) {
-  const q_float = (x * Math.sqrt(3)/3 - y/3) / size;
-  const r_float = y * 2/3 / size;
-  return roundToHex(q_float, r_float);
-}
-
-/**
- * Helper function to round floating point axial coordinates to the nearest hex
- * @param {Number} q - Q axial coordinate (floating point)
- * @param {Number} r - R axial coordinate (floating point)
- * @returns {Object} - {q, r} axial coordinates (rounded integers)
- */
-function roundToHex(q, r) {
-  // Convert to cube coordinates for rounding
-  let x = q;
-  let z = r;
-  let y = -x - z;
-  
-  // Round cube coordinates
-  let rx = Math.round(x);
-  let ry = Math.round(y);
-  let rz = Math.round(z);
-  
-  // Fix rounding errors
-  const x_diff = Math.abs(rx - x);
-  const y_diff = Math.abs(ry - y);
-  const z_diff = Math.abs(rz - z);
-  
-  if (x_diff > y_diff && x_diff > z_diff) {
-    rx = -ry - rz;
-  } else if (y_diff > z_diff) {
-    ry = -rx - rz;
-  } else {
-    rz = -rx - ry;
-  }
-  
-  // Convert back to axial coordinates
-  return {q: rx, r: rz};
-}
-
-/**
- * Get all neighboring axial coordinates for a given hex
- * @param {Number} q - Q axial coordinate
- * @param {Number} r - R axial coordinate
- * @returns {Array} - Array of {q, r} neighbor coordinates
- */
-function getHexNeighbors(q, r) {
-  // Six directions for a hexagonal grid using axial coordinates
-  const directions = [
-    {q: +1, r: 0}, {q: +1, r: -1}, {q: 0, r: -1},
-    {q: -1, r: 0}, {q: -1, r: +1}, {q: 0, r: +1}
-  ];
-  
-  return directions.map(dir => ({
-    q: q + dir.q,
-    r: r + dir.r
-  }));
-}
+// Re-export hex functions for backward compatibility
+export { HEX_DIRECTIONS, axialToPixel, pixelToAxial };
 
 import { 
   resourcesByAge, 
@@ -100,44 +40,71 @@ import { unitTypes } from './units.js';
 function createBaseTerrain(gameState) {
   const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
   const mapType = gameState.mapType || 'continents';
+  const useNewGenerator = gameState.useNewGenerator || false;
   
   console.log(`Creating base terrain for map type: ${mapType}, size: ${mapSize}`);
+  console.log(`Using new hex-based generator: ${useNewGenerator}`);
   
-  // For hexagonal grids, we need to adjust the coordinates to create a more balanced map shape
-  const adjustedWidth = mapSize;
-  const adjustedHeight = mapSize;
+  // Clear existing map
+  gameState.map = [];
   
-  // Calculate the offset for centering the hex grid (optional)
-  const centerOffsetQ = Math.floor(adjustedWidth / 2);
-  const centerOffsetR = Math.floor(adjustedHeight / 2);
+  // Calculate effective radius for a hexagonal map
+  const effectiveRadius = Math.floor(mapSize / 2);
   
-  // Initialize the map with proper hexagonal grid coordinates
-  for (let r = -centerOffsetR; r < adjustedHeight - centerOffsetR; r++) {
+  // Store map properties
+  gameState.mapRadius = effectiveRadius;
+  gameState.usingHexGrid = true;
+  
+  // Use the new hex-based map generator if requested
+  if (useNewGenerator) {
+    console.log("Using new hex-based map generation pipeline");
+    return createBaseTerrainWithNewGenerator(gameState);
+  }
+  
+  // Otherwise use the legacy map generation
+  console.log(`Creating hex grid with radius: ${effectiveRadius} using legacy generator`);
+  
+  // Generate the tiles using our reusable createHexGrid function
+  const width = mapSize;
+  const height = mapSize;
+  const origin = [0, 0]; // or adjust as needed
+  const tiles = createHexGrid(width, height, HEX_SIZE, origin);
+  
+  // Filter and organize the tiles to create a hexagonal shape
+  for (let r = -effectiveRadius; r <= effectiveRadius; r++) {
     const row = [];
-    // In axial coordinates, q can range from -centerOffset to width-centerOffset
-    // We need to adjust the q range for each row to create a proper hex grid shape
-    const qStart = Math.max(-centerOffsetQ, -r - centerOffsetQ);
-    const qEnd = Math.min(adjustedWidth - centerOffsetQ, adjustedWidth - centerOffsetQ - r);
     
-    for (let q = qStart; q < qEnd; q++) {
-      // Convert axial to array indices (keeping positive for array indexing)
-      const arrayX = q + centerOffsetQ;
-      const arrayY = r + centerOffsetR;
+    // Calculate bounds for q based on r to create a hexagonal shape
+    const qStart = Math.max(-effectiveRadius, -r - effectiveRadius);
+    const qEnd = Math.min(effectiveRadius, -r + effectiveRadius);
+    
+    for (let q = qStart; q <= qEnd; q++) {
+      // Calculate array indices (for backward compatibility)
+      // We add an offset to ensure all indices are positive
+      const arrayX = q + effectiveRadius;
+      const arrayY = r + effectiveRadius;
       
-      // Calculate pixel coordinates for rendering
-      const pixelCoords = axialToPixel(q, r);
+      // Find the matching hex from our createHexGrid output
+      // or create a new one if not found
+      const tile = findHexByAxial(tiles, q + effectiveRadius, r + effectiveRadius) || {
+        q: q,
+        r: r,
+        x: axialToPixel(q, r, HEX_SIZE).x,
+        y: axialToPixel(q, r, HEX_SIZE).y,
+        neighbors: getHexNeighbors(q, r)
+      };
       
       row.push({ 
         type: 'plains',
-        // Store array indices for backward compatibility and array access
-        x: arrayX, 
+        // Store both coordinate systems
+        x: arrayX,
         y: arrayY,
-        // Store canonical axial coordinates for hex grid
+        // Store canonical axial coordinates
         q: q,
         r: r,
         // Store pixel coordinates for rendering
-        pixelX: pixelCoords.x,
-        pixelY: pixelCoords.y,
+        pixelX: tile.x,
+        pixelY: tile.y,
         unit: null, 
         building: null,
         discovered: [false, false],
@@ -168,6 +135,135 @@ function createBaseTerrain(gameState) {
       console.log("Using default continents map generation");
       generateContinentsMap(gameState); // Default map type
   }
+}
+
+/**
+ * Create the base terrain using the new hex-based map generator
+ * @param {Object} gameState - The game state
+ */
+function createBaseTerrainWithNewGenerator(gameState) {
+  const mapSize = gameState.mapSize || DEFAULT_MAP_SIZE;
+  const mapType = gameState.mapType || 'continents';
+  
+  console.log(`Creating hex grid with new generator, size: ${mapSize}`);
+  
+  // Generate the tiles using our reusable createHexGrid function
+  const width = mapSize;
+  const height = mapSize;
+  const origin = [0, 0]; // or adjust as needed
+  let tiles = createHexGrid(width, height, HEX_SIZE, origin);
+  
+  // Generate map options based on map type
+  const options = {
+    seed: gameState.mapSeed || Math.floor(Math.random() * 1000000),
+    mountainousness: 1.0,
+    wetness: 1.0
+  };
+  
+  // Adjust generation parameters based on map type
+  switch(mapType) {
+    case 'archipelago':
+      options.wetness = 1.5;       // More water
+      options.mountainousness = 0.9; 
+      break;
+    case 'pangaea':
+      options.wetness = 0.7;       // Less water
+      options.mountainousness = 1.1;
+      break;
+    case 'highlands':
+      options.mountainousness = 1.5; // More mountains
+      options.wetness = 0.9;
+      break;
+    case 'desert':
+      options.wetness = 0.5;       // Very dry
+      options.mountainousness = 0.8;
+      break;
+    // Default is balanced (continents)
+  }
+  
+  console.log(`Map generation options:`, options);
+  
+  // Generate the map using our new pipeline
+  tiles = generateHexMap(tiles, options, gameState);
+  
+  // Convert to the game state's map format (2D array)
+  // We'll create a grid format that matches the existing map structure
+  // but contains our newly generated hex data
+  
+  // Calculate effective radius for a hexagonal map
+  const effectiveRadius = Math.floor(mapSize / 2);
+  
+  // Create 2D grid structure
+  for (let r = -effectiveRadius; r <= effectiveRadius; r++) {
+    const row = [];
+    
+    // Calculate bounds for q based on r to create a hexagonal shape
+    const qStart = Math.max(-effectiveRadius, -r - effectiveRadius);
+    const qEnd = Math.min(effectiveRadius, -r + effectiveRadius);
+    
+    for (let q = qStart; q <= qEnd; q++) {
+      // Calculate array indices (for backward compatibility)
+      const arrayX = q + effectiveRadius;
+      const arrayY = r + effectiveRadius;
+      
+      // Find the matching hex from our generated tiles
+      const tile = findHexByAxial(tiles, q + effectiveRadius, r + effectiveRadius);
+      
+      if (tile) {
+        // Create game map tile from the generated hex
+        const mapTile = {
+          type: tile.type,
+          // Store both coordinate systems
+          x: arrayX,
+          y: arrayY,
+          // Store canonical axial coordinates
+          q: q,
+          r: r,
+          // Store pixel coordinates for rendering
+          pixelX: tile.x,
+          pixelY: tile.y,
+          // Terrain data
+          elevation: tile.elevation,
+          moisture: tile.moisture,
+          terrain: tile.terrain,
+          // Resource data
+          resource: tile.resource,
+          resourceQuality: tile.resourceQuality || 'standard',
+          resourceAmount: tile.resource ? 
+            (tile.resourceQuality === 'rich' ? 80 : 
+             tile.resourceQuality === 'standard' ? 50 : 30) : 0,
+          // Game state
+          unit: null, 
+          building: null,
+          discovered: [false, false],
+          hotspot: !!tile.hotspot
+        };
+        
+        row.push(mapTile);
+      } else {
+        // Fallback if tile not found (should not happen)
+        row.push({
+          type: 'plains',
+          x: arrayX,
+          y: arrayY,
+          q: q,
+          r: r,
+          pixelX: axialToPixel(q, r, HEX_SIZE).x,
+          pixelY: axialToPixel(q, r, HEX_SIZE).y,
+          unit: null,
+          building: null,
+          discovered: [false, false],
+          resourceAmount: 0,
+          resourceQuality: 'standard',
+          hotspot: false
+        });
+      }
+    }
+    
+    gameState.map.push(row);
+  }
+  
+  console.log(`Created map with ${gameState.map.length} rows using new generator`);
 }
 
 /**
@@ -1036,16 +1132,23 @@ export function generateMap(gameState) {
   try {
     gameState.map = [];
     
+    // Check if we should use the new generator
+    const useNewGenerator = gameState.useNewGenerator || false;
+    
     // Create base terrain
     createBaseTerrain(gameState);
     
-    // Structure the terrain
+    // When using the new generator, we've already done everything in one step
+    if (useNewGenerator) {
+      // Just place start positions and finalize
+      placeStartingPositions(gameState);
+      finalizeMap(gameState);
+      return gameState;
+    }
+    
+    // For the legacy generator, continue with the usual steps
     structureTerrain(gameState);
-    
-    // Create resource hotspots
     createResourceHotspots(gameState);
-    
-    // Place starting positions and ensure they're suitable
     placeStartingPositions(gameState);
     
     // Try to add roads - wrapped in try/catch so it doesn't fail the whole map generation

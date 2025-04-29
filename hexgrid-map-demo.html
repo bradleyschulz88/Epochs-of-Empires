@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hex-based Map Generator Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 150px;
+        }
+        
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        select, input, button {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #map-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        canvas {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Hex-based Map Generator Demo</h1>
+            <p>This demo showcases the procedural generation of hex-based maps with terrain and resources.</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="map-size">Map Size:</label>
+                <select id="map-size">
+                    <option value="10">10x10</option>
+                    <option value="20">20x20</option>
+                    <option value="30" selected>30x30</option>
+                    <option value="40">40x40</option>
+                    <option value="50">50x50</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="hex-size">Hex Size:</label>
+                <select id="hex-size">
+                    <option value="15">Small (15px)</option>
+                    <option value="25">Medium (25px)</option>
+                    <option value="35" selected>Large (35px)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="age">Game Age:</label>
+                <select id="age">
+                    <option value="Stone Age" selected>Stone Age</option>
+                    <option value="Bronze Age">Bronze Age</option>
+                    <option value="Iron Age">Iron Age</option>
+                    <option value="Medieval Age">Medieval Age</option>
+                    <option value="Renaissance Age">Renaissance Age</option>
+                    <option value="Industrial Age">Industrial Age</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="mountainousness">Mountainousness:</label>
+                <input type="range" id="mountainousness" min="0.5" max="1.5" step="0.1" value="1.0">
+            </div>
+            
+            <div class="control-group">
+                <label for="wetness">Wetness:</label>
+                <input type="range" id="wetness" min="0.5" max="1.5" step="0.1" value="1.0">
+            </div>
+            
+            <div class="control-group">
+                <label for="seed">Seed:</label>
+                <input type="number" id="seed" min="0" max="999999" value="12345">
+            </div>
+            
+            <div class="control-group">
+                <label for="view-mode">View Mode:</label>
+                <select id="view-mode">
+                    <option value="terrain" selected>Terrain</option>
+                    <option value="elevation">Elevation</option>
+                    <option value="moisture">Moisture</option>
+                    <option value="resources">Resources</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <button id="generate-btn">Generate Map</button>
+            </div>
+        </div>
+        
+        <div id="map-info"></div>
+        
+        <canvas id="map-canvas" width="1000" height="800"></canvas>
+        
+        <div class="legend">
+            <h3>Map Legend</h3>
+            <div id="terrain-legend">
+                <h4>Terrain Types</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2196F3;"></div>
+                    <span>SEA - Deep water, only naval units can enter</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #8BC34A;"></div>
+                    <span>PLAINS - Basic terrain, easy to traverse</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #33691E;"></div>
+                    <span>FOREST - Wood resource, slower movement</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #795548;"></div>
+                    <span>HILLS - Higher elevation, slower movement, stone</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9E9E9E;"></div>
+                    <span>MOUNTAIN - Impassable terrain, contains valuable resources</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #FFC107;"></div>
+                    <span>DESERT - Harsh terrain, slower movement</span>
+                </div>
+            </div>
+            
+            <div id="resource-legend">
+                <h4>Resources</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #8BC34A; border: 2px solid #FF5722;"></div>
+                    <span>FOOD - Basic resource for population</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #33691E; border: 2px solid #FFEB3B;"></div>
+                    <span>WOOD - Building material</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #795548; border: 2px solid #9E9E9E;"></div>
+                    <span>STONE - Advanced building material</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9E9E9E; border: 2px solid #FFD700;"></div>
+                    <span>GOLD - Valuable resource</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9E9E9E; border: 2px solid #795548;"></div>
+                    <span>IRON - Important for weapons and tools</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createHexGrid, hexDistance } from './js/modules/hexgrid.js';
+        import { generateMap } from './js/modules/mapGenerator.js';
+        import { terrainTypes } from './js/modules/terrain.js';
+        import { resourceTileTypes, resourceIcons, getSimpleResourcesByAge } from './js/modules/resources.js';
+
+        // Canvas and context
+        const canvas = document.getElementById('map-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI controls
+        const mapSizeSelect = document.getElementById('map-size');
+        const hexSizeSelect = document.getElementById('hex-size');
+        const ageSelect = document.getElementById('age');
+        const mountainousnessInput = document.getElementById('mountainousness');
+        const wetnessInput = document.getElementById('wetness');
+        const seedInput = document.getElementById('seed');
+        const viewModeSelect = document.getElementById('view-mode');
+        const generateBtn = document.getElementById('generate-btn');
+        const mapInfo = document.getElementById('map-info');
+        
+        // Map state
+        let hexes = [];
+        let resourceCounts = {};
+        let terrainCounts = {};
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            generateMap();
+            
+            // Event listeners
+            generateBtn.addEventListener('click', generateMap);
+            viewModeSelect.addEventListener('change', renderMap);
+        });
+        
+        // Generate a new map
+        function generateMap() {
+            // Get parameters from UI
+            const mapSize = parseInt(mapSizeSelect.value);
+            const hexSize = parseInt(hexSizeSelect.value);
+            const age = ageSelect.value;
+            const seed = parseInt(seedInput.value);
+            const mountainousness = parseFloat(mountainousnessInput.value);
+            const wetness = parseFloat(wetnessInput.value);
+            
+            // Create hex grid
+            const width = mapSize;
+            const height = mapSize;
+            const origin = [canvas.width / 2 - (width * hexSize) / 2, canvas.height / 2 - (height * hexSize) / 2];
+            
+            hexes = createHexGrid(width, height, hexSize, origin);
+            
+            // Mock game state for resource generation
+            const gameState = {
+                currentPlayer: 1,
+                players: [
+                    { id: 1, age: age }
+                ]
+            };
+            
+            // Generate map data
+            const options = {
+                seed: seed,
+                mountainousness: mountainousness,
+                wetness: wetness
+            };
+            
+            console.time('Map Generation');
+            hexes = generateMap(hexes, options, gameState);
+            console.timeEnd('Map Generation');
+            
+            // Calculate statistics
+            calculateMapStats();
+            
+            // Render the map
+            renderMap();
+        }
+        
+        // Calculate map statistics
+        function calculateMapStats() {
+            terrainCounts = {};
+            resourceCounts = {};
+            
+            for (const hex of hexes) {
+                // Count terrains
+                if (!terrainCounts[hex.terrain]) {
+                    terrainCounts[hex.terrain] = 0;
+                }
+                terrainCounts[hex.terrain]++;
+                
+                // Count resources
+                if (hex.resource) {
+                    if (!resourceCounts[hex.resource]) {
+                        resourceCounts[hex.resource] = {
+                            total: 0,
+                            poor: 0,
+                            standard: 0,
+                            rich: 0
+                        };
+                    }
+                    resourceCounts[hex.resource].total++;
+                    resourceCounts[hex.resource][hex.resourceQuality]++;
+                }
+            }
+            
+            // Update info panel
+            let infoHTML = '<h3>Map Statistics</h3>';
+            
+            // Terrain stats
+            infoHTML += '<h4>Terrain Distribution:</h4>';
+            infoHTML += '<ul>';
+            for (const terrain in terrainCounts) {
+                const percentage = ((terrainCounts[terrain] / hexes.length) * 100).toFixed(1);
+                infoHTML += `<li>${terrain}: ${terrainCounts[terrain]} hexes (${percentage}%)</li>`;
+            }
+            infoHTML += '</ul>';
+            
+            // Resource stats
+            infoHTML += '<h4>Resource Distribution:</h4>';
+            infoHTML += '<ul>';
+            for (const resource in resourceCounts) {
+                const data = resourceCounts[resource];
+                const percentage = ((data.total / hexes.length) * 100).toFixed(1);
+                infoHTML += `<li>${resource}: ${data.total} nodes (${percentage}%) - Poor: ${data.poor}, Standard: ${data.standard}, Rich: ${data.rich}</li>`;
+            }
+            infoHTML += '</ul>';
+            
+            mapInfo.innerHTML = infoHTML;
+        }
+        
+        // Render the map
+        function renderMap() {
+            const viewMode = viewModeSelect.value;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw each hex
+            for (const hex of hexes) {
+                drawHex(hex, viewMode);
+            }
+        }
+        
+        // Draw a hex on the canvas
+        function drawHex(hex, viewMode) {
+            const size = parseInt(hexSizeSelect.value);
+            
+            // Start drawing the hex path
+            ctx.beginPath();
+            
+            // Draw the hexagon
+            for (let i = 0; i < 6; i++) {
+                const angle = 2 * Math.PI / 6 * i;
+                const x = hex.x + size * Math.cos(angle);
+                const y = hex.y + size * Math.sin(angle);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            
+            // Fill based on view mode
+            if (viewMode === 'terrain') {
+                fillHexWithTerrain(hex);
+            } else if (viewMode === 'elevation') {
+                fillHexWithElevation(hex);
+            } else if (viewMode === 'moisture') {
+                fillHexWithMoisture(hex);
+            } else if (viewMode === 'resources') {
+                fillHexWithResource(hex);
+            }
+            
+            // Stroke the hex
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+            
+            // Draw resource marker if viewing resources
+            if (viewMode === 'resources' && hex.resource) {
+                drawResourceMarker(hex);
+            }
+            
+            // Draw coordinate for debugging
+            if (size >= 25) {
+                ctx.fillStyle = '#000';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${hex.q},${hex.r}`, hex.x, hex.y);
+            }
+        }
+        
+        // Fill hex with terrain color
+        function fillHexWithTerrain(hex) {
+            let color;
+            
+            switch (hex.terrain) {
+                case 'SEA':
+                    color = '#2196F3';
+                    break;
+                case 'COASTAL_PLAIN':
+                    color = '#7CADA7';
+                    break;
+                case 'PLAINS':
+                    color = '#8BC34A';
+                    break;
+                case 'FOREST':
+                    color = '#33691E';
+                    break;
+                case 'HILLS':
+                    color = '#795548';
+                    break;
+                case 'MOUNTAIN':
+                    color = '#9E9E9E';
+                    break;
+                case 'DESERT':
+                    color = '#FFC107';
+                    break;
+                case 'SWAMP':
+                    color = '#4A6034';
+                    break;
+                default:
+                    color = '#000000';
+            }
+            
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+        
+        // Fill hex with elevation visualization
+        function fillHexWithElevation(hex) {
+            const elevationValue = hex.elevation || 0;
+            // Darker blue for deep ocean, white for high mountains
+            if (elevationValue < 0.35) {
+                // Ocean depths - dark blue to light blue
+                const depthIntensity = Math.max(0, Math.min(1, elevationValue / 0.35));
+                const r = Math.floor(33 + depthIntensity * 100);
+                const g = Math.floor(150 + depthIntensity * 55);
+                const b = Math.floor(243);
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            } else {
+                // Land - green to brown to white
+                const landHeight = (elevationValue - 0.35) / 0.65;
+                let r, g, b;
+                
+                if (landHeight < 0.33) {
+                    // Green (plains) to yellow-green
+                    r = Math.floor(139 + landHeight * 3 * 116);
+                    g = Math.floor(195);
+                    b = Math.floor(74 - landHeight * 3 * 74);
+                } else if (landHeight < 0.66) {
+                    // Yellow-green to brown (hills)
+                    const t = (landHeight - 0.33) * 3;
+                    r = Math.floor(255 - t * 134);
+                    g = Math.floor(195 - t * 112);
+                    b = Math.floor(0 + t * 67);
+                } else {
+                    // Brown to grey to white (mountains)
+                    const t = (landHeight - 0.66) * 3;
+                    r = Math.floor(121 + t * 134);
+                    g = Math.floor(83 + t * 172);
+                    b = Math.floor(67 + t * 188);
+                }
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            }
+            ctx.fill();
+        }
+        
+        // Fill hex with moisture visualization
+        function fillHexWithMoisture(hex) {
+            const moistureValue = hex.moisture || 0;
+            // Brown for dry, dark blue for wet
+            const r = Math.floor(165 - moistureValue * 150);
+            const g = Math.floor(145 - moistureValue * 110);
+            const b = Math.floor(100 + moistureValue * 155);
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.fill();
+        }
+        
+        // Fill hex with base terrain and resource outline
+        function fillHexWithResource(hex) {
+            // First draw terrain
+            fillHexWithTerrain(hex);
+            
+            // Highlight hexes with resources with a border
+            if (hex.resource) {
+                let color;
+                
+                // Apply quality-based colors
+                switch (hex.resourceQuality) {
+                    case 'poor':
+                        color = '#A1887F'; // Muted brown
+                        break;
+                    case 'standard':
+                        color = '#FFC107'; // Yellow
+                        break;
+                    case 'rich':
+                        color = '#F44336'; // Red
+                        break;
+                    default:
+                        color = '#FFFFFF'; // White
+                }
+                
+                // Draw resource quality indicator
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = color;
+                ctx.stroke();
+            }
+        }
+        
+        // Draw resource marker in the center of hex
+        function drawResourceMarker(hex) {
+            if (!hex.resource) return;
+            
+            // Use emoji icons if available
+            const icon = resourceIcons[hex.resource] || '❓';
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(icon, hex.x, hex.y);
+        }
+    </script>
+</body>
+</html>

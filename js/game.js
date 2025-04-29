@@ -165,6 +165,16 @@ function startGame(settings) {
     // Apply settings to initial game state - do this synchronously
     gameState = startNewGame(gameState, settings);
     
+    // Enable new hex map generator if selected in settings
+    if (settings && settings.useNewMapGenerator) {
+      console.log("Using new hex-based map generator");
+      gameState.useNewGenerator = true;
+      
+      // Set a seed for reproducible maps
+      gameState.mapSeed = settings.mapSeed || Math.floor(Math.random() * 1000000);
+      console.log(`Map seed: ${gameState.mapSeed}`);
+    }
+    
     // Use setTimeout to allow the loading screen to appear before heavy processing starts
     setTimeout(() => {
       try {
@@ -221,12 +231,34 @@ function startGame(settings) {
           console.error("Error updating age progress display:", e);
         }
         
-        // Render initial game state
-        try {
-          renderGame();
-        } catch (e) {
-          console.error("Error rendering game:", e);
-        }
+    // Initialize camera position and center the map
+    try {
+      // Center the camera based on the map dimensions
+      if (gameState.usingHexGrid) {
+        // For hex grid, center it based on the hex radius calculation
+        const mapRadius = gameState.mapRadius || Math.floor(gameState.mapSize / 2);
+        const hexSize = HEX_SIZE; // Constant from UI module, adjust as needed
+        
+        // Calculate total width/height in pixels for the hex grid
+        const mapWidthInPixels = Math.sqrt(3) * hexSize * (mapRadius * 2 + 1);
+        const mapHeightInPixels = 3/2 * hexSize * (mapRadius * 2 + 1);
+        
+        // Set camera to center the map
+        cameraOffsetX = (mapWidthInPixels / 2) - (canvas.width / 2);
+        cameraOffsetY = (mapHeightInPixels / 2) - (canvas.height / 2);
+        
+        console.log("Hex grid detected, centering camera at", cameraOffsetX, cameraOffsetY);
+      } else {
+        // For square grid, use the old logic
+        cameraOffsetX = 0;
+        cameraOffsetY = 0;
+      }
+      
+      // Render initial game state with centered map
+      renderGame();
+    } catch (e) {
+      console.error("Error rendering game:", e);
+    }
         
         // Hide loading screen after everything is ready
         if (loadingElement) {
