@@ -1,557 +1,459 @@
-import { 
-  processResourceCollection, 
-  processUnitUpkeep, 
-  processResearch, 
-  processAgeProgress,
-  advanceAge,
-  updatePopulationCap,
-  createNewCity
-} from './gameState.js';
-import { resetMovementPoints } from './movement.js';
-
-import { 
-  updateResourceDisplay, 
-  updateUpkeepDisplay, 
-  updateBuildingButtons, 
-  updateUnitButtons, 
-  updateResearchButtons,
-  updateAgeProgressDisplay,
-  showNotification
-} from './ui.js';
-
-import { addResourceNodes, revealArea } from './map.js';
-import { unitTypes } from './units.js';
-import { buildingTypes, canPlaceBuilding } from './buildings.js';
-import { resourcesByAge } from './resources.js';
-import { worldEvents, diplomacyOptions, factions, logistics } from './constants.js';
-
-// Handle the end of a turn
-export function endTurn(gameState, render) {
-  if (!gameState.gameStarted) return;
-  
-  // Process current player's end-of-turn logic
-  processResourceCollection(gameState, gameState.currentPlayer - 1);
-  processUnitUpkeep(gameState, gameState.currentPlayer - 1);
-  processResearch(gameState, gameState.currentPlayer - 1);
-  processAgeProgress(gameState, gameState.currentPlayer - 1);
-  // Use our own processProductionQueues function that properly imports from the module
-  processProductionQueues(gameState);
-  updatePopulationCap(gameState, gameState.currentPlayer - 1);
-  
-  // Process world events and check for new ones
-  if (gameState.worldEvents && gameState.worldEvents.length > 0) {
-    for (let i = gameState.worldEvents.length - 1; i >= 0; i--) {
-      const event = gameState.worldEvents[i];
-      event.turnsRemaining--;
-      
-      if (event.turnsRemaining <= 0) {
-        showNotification(`${event.name} has ended`);
-        gameState.worldEvents.splice(i, 1);
-      }
-    }
-  }
-  
-  // Switch to next player or advance turn
-  gameState.currentPlayer = (gameState.currentPlayer % 2) + 1;
-  
-  // Reset movement points for all units of the current player
-  resetMovementPoints(gameState.players[gameState.currentPlayer - 1].units);
-  
-  if (gameState.currentPlayer === 1) {
-    // Start of a new turn
-    gameState.turn++;
-    updateYearDisplay(gameState);
-  }
-  
-  // Update UI based on current player
-  document.getElementById('currentPlayer').textContent = gameState.currentPlayer;
-  document.getElementById('currentAge').textContent = gameState.players[gameState.currentPlayer - 1].age;
-  
-  // Update UI elements
-  updateResourceDisplay(gameState);
-  updateResearchButtons(gameState, startResearch);
-  updateUnitButtons(gameState, createUnit);
-  updateBuildingButtons(gameState, startBuilding);
-  updateUpkeepDisplay(gameState);
-  updateAgeProgressDisplay(gameState);
-  
-  // If current player is AI, process AI turn
-  if (gameState.players[gameState.currentPlayer - 1].isAI) {
-    setTimeout(() => {
-      // Simple AI logic
-      const ai = gameState.players[1];
-      
-      // Try to create units
-      if (ai.unlockedUnits && ai.unlockedUnits.length > 0) {
-        for (const unitType of ai.unlockedUnits) {
-          createUnit(gameState, unitType);
-        }
-      }
-      
-      // End AI turn
-      setTimeout(() => endTurn(gameState, render), 1000);
-    }, 1000);
-  }
-  
-  // Render updated map
-  render(gameState);
-  
-  showNotification(`Player ${gameState.currentPlayer}'s Turn`);
-}
-
-// Update year display based on current turn
-export function updateYearDisplay(gameState) {
-  const yearCounter = document.getElementById('yearCounter');
-  const turnCounter = document.getElementById('turnCounter');
-  
-  turnCounter.textContent = gameState.turn;
-  
-  // Calculate historical year based on turn and age
-  const currentAge = gameState.players[gameState.currentPlayer - 1].age;
-  const ageIndex = gameState.ages.indexOf(currentAge);
-  const historicalYears = ['3000 BCE', '2000 BCE', '1000 BCE', '500 CE', '1400 CE', '1800 CE', '1900 CE', '1914 CE'];
-  yearCounter.textContent = historicalYears[ageIndex];
-}
-
-// Start researching a technology
-export function startResearch(gameState, techName) {
-  const player = gameState.players[gameState.currentPlayer - 1];
-  
-  // Check if already researching something
-  if (player.currentResearch) {
-    showNotification('Already researching something');
-    return;
-  }
-  
-  // Set current research
-  player.currentResearch = techName;
-  player.researchProgress = 0;
-  
-  updateResearchButtons(gameState, startResearch);
-  showNotification(`Researching ${techName}`);
-}
-
-// Advance to the next age function
-export function advanceToNextAge(gameState) {
-  const playerIndex = gameState.currentPlayer - 1;
-  const result = advanceAge(gameState, playerIndex);
-  
-  if (result) {
-    // Refresh resource nodes with new age-specific resources
-    addResourceNodes(gameState);
-    
-    // Update displays
-    document.getElementById('currentAge').textContent = gameState.players[playerIndex].age;
-    updateResourceDisplay(gameState);
-    updateUnitButtons(gameState, createUnit);
-    updateResearchButtons(gameState, startResearch);
-    updateBuildingButtons(gameState, startBuilding);
-    updateAgeProgressDisplay(gameState);
-    
-    showNotification(result);
-  }
-}
-
-// Toggle fog of war
-export function toggleFogOfWar(gameState) {
-  gameState.fogOfWarEnabled = !gameState.fogOfWarEnabled;
-  showNotification(`Fog of War: ${gameState.fogOfWarEnabled ? 'Enabled' : 'Disabled'}`);
-  return gameState.fogOfWarEnabled;
-}
-
-// Set AI difficulty
-export function setAIDifficulty(gameState, difficulty) {
-  gameState.aiDifficulty = difficulty;
-  showNotification(`AI Difficulty set to: ${difficulty}`);
-}
-
-// Handle diplomacy actions
-export function handleDiplomacy(gameState, action) {
-  try {
-    const activePlayer = gameState.players[gameState.currentPlayer - 1];
-    const otherPlayerIndex = gameState.currentPlayer % 2;
-    const otherPlayer = gameState.players[otherPlayerIndex];
-
-    if (!action) {
-      throw new Error('No diplomacy action specified');
+export class GameEvents {
+    constructor(gameState) {
+        this.gameState = gameState;
+        this.eventQueue = [];
+        this.activeEvents = [];
+        this.eventHistory = [];
     }
 
-    if (!otherPlayer) {
-      throw new Error('No valid target player found');
+    /**
+     * Update and process events for current turn
+     */
+    processTurnEvents() {
+        // Process active events
+        this.updateActiveEvents();
+        
+        // Generate new events
+        this.generateRandomEvents();
+        
+        // Process event queue
+        this.processEventQueue();
     }
 
-    // Check if action is allowed based on current status
-    const currentStatus = activePlayer.diplomacy.status;
-    const allowedActions = {
-      'Neutral': ['ally', 'trade', 'war'],
-      'Allied': ['trade', 'war'],
-      'War': ['peace'],
-      'Trade': ['ally', 'war', 'peace']
-    };
-
-    if (!allowedActions[currentStatus]?.includes(action)) {
-      throw new Error(`Cannot perform ${action} while in ${currentStatus} status`);
-    }
-
-    switch (action) {
-      case 'ally':
-        if (activePlayer.diplomacy.status === 'War') {
-          throw new Error('Cannot form alliance while at war');
-        }
-        activePlayer.diplomacy.status = 'Allied';
-        otherPlayer.diplomacy.status = 'Allied';
-        showNotification(`Alliance formed with ${otherPlayer.name}`, 'success');
-        break;
-
-      case 'trade':
-        if (activePlayer.diplomacy.status === 'War') {
-          throw new Error('Cannot establish trade while at war');
-        }
-        showNotification(`Trade established with ${otherPlayer.name}`, 'success');
-        break;
-
-      case 'war':
-        if (activePlayer.diplomacy.treaties?.includes('nonAggression')) {
-          throw new Error('Cannot declare war while non-aggression pact is active');
-        }
-        activePlayer.diplomacy.status = 'War';
-        otherPlayer.diplomacy.status = 'War';
-        showNotification(`War declared on ${otherPlayer.name}`, 'warning');
-        break;
-
-      case 'peace':
-        if (!activePlayer.diplomacy.peaceCooldown) {
-          activePlayer.diplomacy.status = 'Neutral';
-          otherPlayer.diplomacy.status = 'Neutral';
-          showNotification(`Peace negotiated with ${otherPlayer.name}`, 'success');
-        } else {
-          throw new Error(`Peace negotiations available in ${activePlayer.diplomacy.peaceCooldown} turns`);
-        }
-        break;
-
-      default:
-        throw new Error(`Unknown diplomacy action: ${action}`);
-    }
-
-    // Update UI
-    document.getElementById('diplomacyStatus').textContent = activePlayer.diplomacy.status;
-    
-  } catch (error) {
-    console.error('Diplomacy action failed:', error);
-    showNotification(error.message, 'error');
-    // Reset diplomacy action selector
-    document.getElementById('diplomacyAction').value = '';
-  }
-}
-
-// Process production queues for the current player
-export function processProductionQueues(gameState) {
-  const playerIndex = gameState.currentPlayer - 1;
-  
-  // First try to use the gameState version if available
-  try {
-    return import('./gameState.js').then(module => {
-      if (module.processProductionQueues) {
-        return module.processProductionQueues(gameState, playerIndex);
-      }
-      return false;
-    }).catch(error => {
-      console.error('Error importing processProductionQueues:', error);
-      return false;
-    });
-  } catch (error) {
-    console.error('Error processing production queues:', error);
-    return false;
-  }
-}
-
-// Process an AI turn
-export function processAITurn(gameState, render) {
-  const ai = gameState.players[1]; // AI is player 2
-  
-  // Basic AI actions
-  if (ai.unlockedUnits) {
-    for (const unitType of ai.unlockedUnits) {
-      createUnit(gameState, unitType);
-    }
-  }
-  
-  // End AI turn
-  setTimeout(() => endTurn(gameState, render), 1000);
-}
-
-// Create a new unit
-export function createUnit(gameState, unitType) {
-  const player = gameState.players[gameState.currentPlayer - 1];
-  const unit = unitTypes[unitType];
-  
-  if (!unit) return false;
-  
-  // Find valid position near HQ
-  let spawnX = -1, spawnY = -1;
-  
-  for (const building of player.buildings) {
-    if (building.type === 'hq') {
-      const x = building.x;
-      const y = building.y;
-      
-      // Check surrounding tiles
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          
-          const newX = x + dx;
-          const newY = y + dy;
-          
-          if (newX >= 0 && newX < gameState.map.length && newY >= 0 && newY < gameState.map[0].length) {
-            const tile = gameState.map[newY][newX];
-            if (tile.type !== 'water' && !tile.unit && !tile.building) {
-              spawnX = newX;
-              spawnY = newY;
-              break;
+    /**
+     * Update currently active events
+     */
+    updateActiveEvents() {
+        this.activeEvents = this.activeEvents.filter(event => {
+            if (event.duration) {
+                event.remainingTurns--;
+                if (event.remainingTurns <= 0) {
+                    this.endEvent(event);
+                    return false;
+                }
+                this.applyEventEffects(event);
             }
-          }
+            return true;
+        });
+    }
+
+    /**
+     * Generate random events based on current game state
+     */
+    generateRandomEvents() {
+        if (Math.random() < this.getEventChance()) {
+            const possibleEvents = this.getPossibleEvents();
+            if (possibleEvents.length > 0) {
+                const event = this.selectRandomEvent(possibleEvents);
+                this.queueEvent(event);
+            }
         }
-        if (spawnX !== -1) break;
-      }
     }
-    if (spawnX !== -1) break;
-  }
-  
-  if (spawnX === -1) {
-    return false;
-  }
-  
-  // Create unit object
-  const newUnit = {
-    type: unitType,
-    owner: gameState.currentPlayer,
-    x: spawnX,
-    y: spawnY,
-    health: 100,
-    canMove: true
-  };
-  
-  // Add to player's units and map
-  player.units.push(newUnit);
-  gameState.map[spawnY][spawnX].unit = newUnit;
-  
-  // Update UI
-  updateResourceDisplay(gameState);
-  
-  return true;
-}
 
-// Start building construction
-export function startBuilding(gameState, buildingType) {
-  gameState.selectedBuildingType = buildingType;
-  showNotification(`Select location for ${buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`);
-}
+    /**
+     * Get chance of event occurring this turn
+     */
+    getEventChance() {
+        let baseChance = 0.1; // 10% base chance per turn
+        
+        // Modify based on game state
+        if (this.activeEvents.length > 0) {
+            baseChance *= 0.5; // Reduce chance if events already active
+        }
+        
+        // Increase chance based on turns since last event
+        const turnsSinceLastEvent = this.getTurnsSinceLastEvent();
+        baseChance += turnsSinceLastEvent * 0.01;
+        
+        return Math.min(baseChance, 0.3); // Cap at 30%
+    }
 
-// Build a structure at the specified location
-export function buildStructure(gameState, x, y) {
-  // Remove any existing building suggestion UI
-  const existingSuggestion = document.querySelector('.building-suggestion');
-  if (existingSuggestion) {
-    existingSuggestion.remove();
-  }
-  
-  if (!gameState.selectedBuildingType) return false;
-  
-  const player = gameState.players[gameState.currentPlayer - 1];
-  const building = buildingTypes[gameState.selectedBuildingType];
-  const tile = gameState.map[y][x];
-  
-  // Check if location is valid using the buildings module function
-  const { canPlace, reason } = canPlaceBuilding(gameState.selectedBuildingType, x, y, gameState);
-  
-  if (!canPlace) {
-    showNotification(reason);
-    gameState.selectedBuildingType = null;
-    return false;
-  }
-  
-  // Check if player has resources to build
-  if (building.cost) {
-    for (const resource in building.cost) {
-      if (!player.resources[resource] || player.resources[resource] < building.cost[resource]) {
-        showNotification(`Not enough ${resource} to build ${gameState.selectedBuildingType}`);
-        gameState.selectedBuildingType = null;
-        return false;
-      }
+    /**
+     * Get turns since last event
+     */
+    getTurnsSinceLastEvent() {
+        if (this.eventHistory.length === 0) return 10;
+        return this.gameState.turn - this.eventHistory[this.eventHistory.length - 1].turn;
     }
-    
-    // Deduct resources
-    for (const resource in building.cost) {
-      player.resources[resource] -= building.cost[resource];
+
+    /**
+     * Get list of possible events based on current conditions
+     */
+    getPossibleEvents() {
+        return Object.entries(this.eventTypes).filter(([_, event]) => 
+            this.checkEventConditions(event)
+        ).map(([id, event]) => ({
+            id,
+            ...event
+        }));
     }
-  }
-  
-  // Add to building queue instead of directly building
-  player.buildingQueue.push({
-    type: gameState.selectedBuildingType,
-    x: x,
-    y: y,
-    progress: 0
-  });
-  
-  // Show building in progress on the map
-  tile.buildingInProgress = {
-    type: gameState.selectedBuildingType,
-    owner: gameState.currentPlayer,
-    progress: 0
-  };
-  
-  // Instant build for HQ (city center) at game start
-  if (gameState.selectedBuildingType === 'hq' && player.buildings.length === 0) {
-    // Create building instantly
-    const newBuilding = {
-      type: gameState.selectedBuildingType,
-      owner: gameState.currentPlayer,
-      x: x,
-      y: y
+
+    /**
+     * Check if event conditions are met
+     */
+    checkEventConditions(event) {
+        if (!event.conditions) return true;
+        
+        for (const condition of event.conditions) {
+            if (!this.checkCondition(condition)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Check a single condition
+     */
+    checkCondition(condition) {
+        switch (condition.type) {
+            case 'season':
+                return this.gameState.season === condition.value;
+            case 'terrain':
+                return this.hasTerrainType(condition.value);
+            case 'resource':
+                return this.hasResource(condition.value);
+            case 'technology':
+                return this.hasTechnology(condition.value);
+            case 'building':
+                return this.hasBuilding(condition.value);
+            case 'population':
+                return this.checkPopulationCondition(condition);
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Check if map has specific terrain type
+     */
+    hasTerrainType(terrainType) {
+        return this.gameState.map.some(row =>
+            row.some(tile => tile.type === terrainType)
+        );
+    }
+
+    /**
+     * Check if any player has specific resource
+     */
+    hasResource(resource) {
+        return this.gameState.players.some(player =>
+            player.resources[resource] > 0
+        );
+    }
+
+    /**
+     * Check if any player has specific technology
+     */
+    hasTechnology(technology) {
+        return this.gameState.players.some(player =>
+            player.technologies?.includes(technology)
+        );
+    }
+
+    /**
+     * Check if any player has specific building
+     */
+    hasBuilding(buildingType) {
+        return this.gameState.map.some(row =>
+            row.some(tile =>
+                tile.building?.type === buildingType
+            )
+        );
+    }
+
+    /**
+     * Check population-related conditions
+     */
+    checkPopulationCondition(condition) {
+        return this.gameState.players.some(player =>
+            this.compareValues(player.population, condition.value, condition.operator)
+        );
+    }
+
+    /**
+     * Compare values with operator
+     */
+    compareValues(a, b, operator) {
+        switch (operator) {
+            case '>': return a > b;
+            case '<': return a < b;
+            case '>=': return a >= b;
+            case '<=': return a <= b;
+            case '=': return a === b;
+            default: return false;
+        }
+    }
+
+    /**
+     * Select random event from possible events
+     */
+    selectRandomEvent(possibleEvents) {
+        const totalWeight = possibleEvents.reduce(
+            (sum, event) => sum + (event.weight || 1), 0
+        );
+        
+        let random = Math.random() * totalWeight;
+        
+        for (const event of possibleEvents) {
+            random -= (event.weight || 1);
+            if (random <= 0) {
+                return this.createEventInstance(event);
+            }
+        }
+        
+        return this.createEventInstance(possibleEvents[0]);
+    }
+
+    /**
+     * Create instance of event with specific parameters
+     */
+    createEventInstance(eventType) {
+        return {
+            id: eventType.id,
+            type: eventType.type,
+            name: eventType.name,
+            description: eventType.description,
+            duration: eventType.duration,
+            remainingTurns: eventType.duration,
+            effects: eventType.effects,
+            options: eventType.options,
+            targets: this.selectEventTargets(eventType)
+        };
+    }
+
+    /**
+     * Select targets for event effects
+     */
+    selectEventTargets(eventType) {
+        const targets = {};
+        
+        if (eventType.targetTypes) {
+            for (const [key, targetType] of Object.entries(eventType.targetTypes)) {
+                targets[key] = this.selectTarget(targetType);
+            }
+        }
+        
+        return targets;
+    }
+
+    /**
+     * Select specific target based on target type
+     */
+    selectTarget(targetType) {
+        switch (targetType) {
+            case 'player':
+                return this.selectRandomPlayer();
+            case 'tile':
+                return this.selectRandomTile();
+            case 'unit':
+                return this.selectRandomUnit();
+            case 'building':
+                return this.selectRandomBuilding();
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Queue new event
+     */
+    queueEvent(event) {
+        this.eventQueue.push(event);
+    }
+
+    /**
+     * Process queued events
+     */
+    processEventQueue() {
+        while (this.eventQueue.length > 0) {
+            const event = this.eventQueue.shift();
+            this.startEvent(event);
+        }
+    }
+
+    /**
+     * Start a new event
+     */
+    startEvent(event) {
+        // Apply immediate effects
+        this.applyEventEffects(event);
+        
+        // Add to active events if it has duration
+        if (event.duration) {
+            this.activeEvents.push(event);
+        }
+        
+        // Add to history
+        this.eventHistory.push({
+            ...event,
+            turn: this.gameState.turn
+        });
+        
+        // Notify players
+        this.notifyEventStart(event);
+    }
+
+    /**
+     * End an active event
+     */
+    endEvent(event) {
+        // Remove effects if necessary
+        this.removeEventEffects(event);
+        
+        // Notify players
+        this.notifyEventEnd(event);
+    }
+
+    /**
+     * Apply event effects
+     */
+    applyEventEffects(event) {
+        if (!event.effects) return;
+        
+        for (const effect of event.effects) {
+            this.applyEffect(effect, event.targets);
+        }
+    }
+
+    /**
+     * Apply a single effect
+     */
+    applyEffect(effect, targets) {
+        switch (effect.type) {
+            case 'resource':
+                this.applyResourceEffect(effect, targets);
+                break;
+            case 'terrain':
+                this.applyTerrainEffect(effect, targets);
+                break;
+            case 'unit':
+                this.applyUnitEffect(effect, targets);
+                break;
+            case 'building':
+                this.applyBuildingEffect(effect, targets);
+                break;
+            case 'player':
+                this.applyPlayerEffect(effect, targets);
+                break;
+        }
+    }
+
+    /**
+     * Remove event effects
+     */
+    removeEventEffects(event) {
+        if (!event.effects) return;
+        
+        for (const effect of event.effects) {
+            if (effect.reversible) {
+                this.removeEffect(effect, event.targets);
+            }
+        }
+    }
+
+    /**
+     * Remove a single effect
+     */
+    removeEffect(effect, targets) {
+        // Implement reverse of each effect type
+        switch (effect.type) {
+            case 'resource':
+                this.removeResourceEffect(effect, targets);
+                break;
+            case 'terrain':
+                this.removeTerrainEffect(effect, targets);
+                break;
+            case 'unit':
+                this.removeUnitEffect(effect, targets);
+                break;
+            case 'building':
+                this.removeBuildingEffect(effect, targets);
+                break;
+            case 'player':
+                this.removePlayerEffect(effect, targets);
+                break;
+        }
+    }
+
+    /**
+     * Notify players about event start
+     */
+    notifyEventStart(event) {
+        // Implementation depends on UI system
+        this.gameState.notifyPlayers({
+            type: 'eventStart',
+            event: event
+        });
+    }
+
+    /**
+     * Notify players about event end
+     */
+    notifyEventEnd(event) {
+        // Implementation depends on UI system
+        this.gameState.notifyPlayers({
+            type: 'eventEnd',
+            event: event
+        });
+    }
+
+    /**
+     * Event type definitions
+     */
+    eventTypes = {
+        drought: {
+            name: 'Drought',
+            type: 'disaster',
+            description: 'A severe drought affects crop yields',
+            duration: 3,
+            weight: 1,
+            conditions: [
+                { type: 'season', value: 'summer' }
+            ],
+            effects: [
+                {
+                    type: 'resource',
+                    resource: 'food',
+                    modifier: 0.5,
+                    reversible: true
+                }
+            ]
+        },
+        plague: {
+            name: 'Plague',
+            type: 'disaster',
+            description: 'A plague spreads through populated areas',
+            duration: 4,
+            weight: 0.5,
+            conditions: [
+                { type: 'population', value: 50, operator: '>' }
+            ],
+            effects: [
+                {
+                    type: 'player',
+                    attribute: 'population',
+                    modifier: 0.8,
+                    reversible: false
+                }
+            ]
+        },
+        goodHarvest: {
+            name: 'Abundant Harvest',
+            type: 'blessing',
+            description: 'Favorable conditions lead to increased crop yields',
+            duration: 2,
+            weight: 1,
+            effects: [
+                {
+                    type: 'resource',
+                    resource: 'food',
+                    modifier: 1.5,
+                    reversible: true
+                }
+            ]
+        },
+        // Add more event types as needed
     };
-    
-    // Add to player's buildings and map
-    player.buildings.push(newBuilding);
-    tile.building = { type: gameState.selectedBuildingType, owner: gameState.currentPlayer };
-    tile.buildingInProgress = null;
-    player.buildingQueue.shift(); // Remove from queue
-    
-    // Create new city
-    createNewCity(gameState, gameState.currentPlayer - 1, x, y);
-    
-    // Reveal area around building
-    if (building.vision) {
-      revealArea(gameState, x, y, building.vision, gameState.currentPlayer - 1);
-    }
-  }
-  
-  // Store the building type before resetting selection
-  const builtBuildingType = gameState.selectedBuildingType;
-  
-  // Reset selection
-  gameState.selectedBuildingType = null;
-  
-  // Update UI
-  updateResourceDisplay(gameState);
-  
-  // Show notification about construction
-  if (builtBuildingType === 'hq') {
-    showNotification(`${builtBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} built!`);
-  } else {
-    showNotification(`${builtBuildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} construction started`);
-  }
-  
-  return true;
-}
-
-// Add unit to production queue
-export function queueUnit(gameState, buildingId, unitType) {
-  const player = gameState.players[gameState.currentPlayer - 1];
-  const building = player.buildings[buildingId];
-  const unitData = unitTypes[unitType];
-  
-  if (!building || !unitData) return false;
-  
-  // Check if building can produce this unit type
-  const buildingData = buildingTypes[building.type];
-  
-  if (buildingData.category !== "production" || buildingData.unitType !== unitData.type) {
-    showNotification(`This building cannot produce ${unitType} units`);
-    return false;
-  }
-  
-  // Check queue capacity
-  if (!building.unitQueue) building.unitQueue = [];
-  if (building.unitQueue.length >= buildingData.queueCapacity) {
-    showNotification(`Production queue is full (${buildingData.queueCapacity} max)`);
-    return false;
-  }
-  
-  // Check if player has resources
-  if (unitData.cost) {
-    for (const resource in unitData.cost) {
-      if (!player.resources[resource] || player.resources[resource] < unitData.cost[resource]) {
-        showNotification(`Not enough ${resource} to build ${unitType}`);
-        return false;
-      }
-    }
-    
-    // Deduct resources
-    for (const resource in unitData.cost) {
-      player.resources[resource] -= unitData.cost[resource];
-    }
-  }
-  
-  // Add to queue
-  building.unitQueue.push({
-    type: unitType,
-    progress: 0
-  });
-  
-  // Update UI
-  updateResourceDisplay(gameState);
-  updateProductionQueues(gameState);
-  
-  showNotification(`Added ${unitType} to production queue`);
-  return true;
-}
-
-// Cancel item from production queue and refund 50% of cost
-export function cancelQueueItem(gameState, isBuilding, buildingId, queueIndex) {
-  const player = gameState.players[gameState.currentPlayer - 1];
-  
-  if (isBuilding) {
-    // Cancel building
-    if (queueIndex >= player.buildingQueue.length) return false;
-    
-    const buildingItem = player.buildingQueue[queueIndex];
-    const buildingData = buildingTypes[buildingItem.type];
-    
-    // Refund 50% of cost
-    if (buildingData.cost) {
-      for (const resource in buildingData.cost) {
-        const refundAmount = Math.floor(buildingData.cost[resource] * 0.5);
-        if (!player.resources[resource]) player.resources[resource] = 0;
-        player.resources[resource] += refundAmount;
-      }
-    }
-    
-    // Remove from queue
-    player.buildingQueue.splice(queueIndex, 1);
-    
-    // Remove in-progress marker from map
-    if (queueIndex === 0) {
-      gameState.map[buildingItem.y][buildingItem.x].buildingInProgress = null;
-    }
-    
-  } else {
-    // Cancel unit production
-    if (buildingId >= player.buildings.length) return false;
-    
-    const building = player.buildings[buildingId];
-    if (!building.unitQueue || queueIndex >= building.unitQueue.length) return false;
-    
-    const unitItem = building.unitQueue[queueIndex];
-    const unitData = unitTypes[unitItem.type];
-    
-    // Refund 50% of cost
-    if (unitData.cost) {
-      for (const resource in unitData.cost) {
-        const refundAmount = Math.floor(unitData.cost[resource] * 0.5);
-        if (!player.resources[resource]) player.resources[resource] = 0;
-        player.resources[resource] += refundAmount;
-      }
-    }
-    
-    // Remove from queue
-    building.unitQueue.splice(queueIndex, 1);
-  }
-  
-  // Update UI
-  updateResourceDisplay(gameState);
-  
-  showNotification('Production cancelled, 50% resources refunded');
-  return true;
 }

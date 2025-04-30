@@ -9,6 +9,8 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; background-color: #
   height: calc(100vh - 20px);
   width: calc(100vw - 20px);
   overflow: hidden;
+  position: relative;
+  z-index: 1; /* Ensure game container stays below overlays */
 }
 
 #canvasContainer { 

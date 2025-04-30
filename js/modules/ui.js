@@ -710,6 +710,19 @@ export function getUnitTooltipContent(unit) {
   return content;
 }
 
+// Cache for rendered tiles
+const tileCache = new Map();
+
+// Cache key generator for tiles
+function getTileCacheKey(tile, x, y) {
+  return `${x},${y},${tile.type},${tile.discovered},${tile.unit?.type},${tile.building?.type},${tile.resourceAmount}`;
+}
+
+// Clear cache when needed (e.g., on major state changes)
+export function clearTileCache() {
+  tileCache.clear();
+}
+
 // Render the game map with hexagonal tiles
 export function render(gameState, canvasData) {
   const { 
@@ -803,234 +816,28 @@ export function render(gameState, canvasData) {
       
       // Draw main map tiles as hexagons
       if (tile.discovered[gameState.currentPlayer - 1]) {
-        // Get terrain info and color
-        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
+        const cacheKey = getTileCacheKey(tile, x, y);
+        let cachedTile = tileCache.get(cacheKey);
         
-        // Draw the hexagon for the tile
-        drawHexagon(ctx, screenX, screenY, hexSize, terrainInfo.color);
-        
-        // Draw hex grid lines
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 0.5;
-        drawHexagonOutline(ctx, screenX, screenY, hexSize);
-        
-        // Draw buildings or buildings in progress with hex shapes
-        if (tile.building) {
-          const owner = gameState.players[tile.building.owner - 1];
-          ctx.fillStyle = owner.color;
+        if (!cachedTile) {
+          // Create an offscreen canvas for caching
+          const offscreen = document.createElement('canvas');
+          offscreen.width = hexSize * 2;
+          offscreen.height = hexSize * 2;
+          const offCtx = offscreen.getContext('2d');
           
-          // Draw smaller hexagon for building
-          drawHexagon(ctx, screenX, screenY, hexSize * 0.7, owner.color);
+          // Render tile to offscreen canvas
+          drawHexagonalTile(offCtx, hexSize, hexSize, hexSize, tile, gameState);
           
-          // Indicate building type
-          ctx.fillStyle = '#fff';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(tile.building.type.charAt(0).toUpperCase(), screenX, screenY + 3);
-          ctx.textAlign = 'start'; // Reset text alignment
-        } 
-        else if (tile.buildingInProgress) {
-          // Show in-progress building with construction pattern
-          const owner = gameState.players[tile.buildingInProgress.owner - 1];
-          
-          // Striped pattern for in-progress buildings
-          ctx.fillStyle = owner.color;
-          ctx.globalAlpha = 0.5; // Make it semi-transparent
-          drawHexagon(ctx, screenX, screenY, hexSize * 0.7, owner.color);
-          ctx.globalAlpha = 1.0;
-          
-          // Show progress
-          ctx.fillStyle = '#fff';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`${Math.floor(tile.buildingInProgress.progress)}%`, screenX, screenY + 3);
-          ctx.textAlign = 'start'; // Reset text alignment
+          // Store in cache
+          tileCache.set(cacheKey, offscreen);
+          cachedTile = offscreen;
         }
         
-        // Draw units (still using circles for better visibility)
-        if (tile.unit) {
-          const owner = gameState.players[tile.unit.owner - 1];
-          ctx.fillStyle = owner.color;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, hexSize/2, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Indicate unit type
-          ctx.fillStyle = '#fff';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(tile.unit.type.charAt(0).toUpperCase(), screenX, screenY + 3);
-          ctx.textAlign = 'start'; // Reset text alignment
-          
-          // Draw health bar if damaged - position below unit
-          if (tile.unit.health && tile.unit.health < 100) {
-            const barWidth = hexSize; // Width of the health bar
-            const barHeight = 3;  // Height of the health bar
-            const barX = screenX - barWidth/2;  // Center the bar horizontally
-            const barY = screenY + hexSize/2 + 5; // Position below unit
-            
-            ctx.fillStyle = '#f00';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-            
-            ctx.fillStyle = '#0f0';
-            const healthWidth = barWidth * (tile.unit.health / 100);
-            ctx.fillRect(barX, barY, healthWidth, barHeight);
-          }
-          
-          // Draw movement points indicator for current player's units
-          if (tile.unit.owner === gameState.currentPlayer && tile.unit.remainingMP !== undefined) {
-            const unitTypeInfo = unitTypes[tile.unit.type];
-            const maxMP = unitTypeInfo ? unitTypeInfo.move : 0;
-            
-            // Display small MP indicator
-            ctx.fillStyle = '#fff';
-            ctx.font = '8px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${tile.unit.remainingMP}/${maxMP}`, screenX, screenY - hexSize/2 + 8);
-            ctx.textAlign = 'start'; // Reset text alignment
-          }
-        }
-        
-        // Show resource amount for resource tiles with quality indicator - adapted for hex
-        if (Object.keys(resourceTileTypes).includes(tile.type) && tile.resourceAmount > 0) {
-          // Draw quality indicator border
-          let borderColor = '#fff'; // Default for standard
-          if (tile.resourceQuality === 'rich') {
-            borderColor = '#FFC107'; // Gold for rich resources
-          } else if (tile.resourceQuality === 'poor') {
-            borderColor = '#607D8B'; // Grey for poor resources
-          }
-          
-          // Draw a slightly larger hex outline with the quality color
-          ctx.strokeStyle = borderColor;
-          ctx.lineWidth = 2;
-          drawHexagonOutline(ctx, screenX, screenY, hexSize * 0.85);
-          
-          // Display resource amount
-          ctx.fillStyle = '#fff';
-          ctx.font = '10px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(tile.resourceAmount.toString(), screenX, screenY - hexSize/3);
-          ctx.textAlign = 'start'; // Reset text alignment
-          
-          // Display quality indicator
-          ctx.fillStyle = borderColor;
-          ctx.font = '8px Arial Bold';
-          ctx.textAlign = 'center';
-          const qualityText = tile.resourceQuality === 'rich' ? 'R' : (tile.resourceQuality === 'poor' ? 'P' : 'S');
-          ctx.fillText(qualityText, screenX + hexSize/2, screenY - hexSize/2);
-          ctx.textAlign = 'start'; // Reset text alignment
-          
-          // If resource requires a building to extract, add indicator
-          if (resourceTileTypes[tile.type].buildingRequired) {
-            ctx.fillStyle = '#FF5722';
-            ctx.beginPath();
-            ctx.arc(screenX + hexSize/2, screenY + hexSize/2, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        
-        // Highlight selected unit
-        if (selectedUnit && selectedUnit.x === x && selectedUnit.y === y) {
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 2;
-          drawHexagonOutline(ctx, screenX, screenY, hexSize * 0.9);
-        }
-        
-        // Highlight valid movement locations when in move mode - adapted for hex
-        if (gameState.unitActionMode === 'move' && gameState.validMovementLocations) {
-          // Find if this tile is a valid movement location
-          const validLocation = gameState.validMovementLocations.find(loc => loc.x === x && loc.y === y);
-          if (validLocation) {
-            // Enhanced visual style for movement locations based on cost
-            const movementCost = validLocation.cost;
-            
-            // Color gradient based on movement cost
-            let movementColor;
-            
-            if (selectedUnit && unitTypes[selectedUnit.type]) {
-              const maxMove = unitTypes[selectedUnit.type].move;
-              const moveCostRatio = movementCost / maxMove;
-              
-              // Green to yellow to red gradient based on how much of total MP is used
-              if (moveCostRatio <= 0.3) {
-                movementColor = 'rgba(40, 167, 69, 0.5)'; // Green for low cost
-              } else if (moveCostRatio <= 0.7) {
-                movementColor = 'rgba(255, 193, 7, 0.5)'; // Yellow for medium cost
-              } else {
-                movementColor = 'rgba(220, 53, 69, 0.5)'; // Red for high cost
-              }
-            } else {
-              movementColor = 'rgba(0, 150, 255, 0.4)'; // Default blue
-            }
-            
-            // Fill hex with movement color
-            drawHexagon(ctx, screenX, screenY, hexSize * 0.95, movementColor);
-            
-            // Add directional movement indicator (arrow) - adapted for hex
-            if (selectedUnit) {
-              // Calculate the direction between the two tiles using axial coordinates
-              const sourceQ = selectedUnit.q !== undefined ? selectedUnit.q : selectedUnit.x;
-              const sourceR = selectedUnit.r !== undefined ? selectedUnit.r : selectedUnit.y;
-              const targetQ = validLocation.q !== undefined ? validLocation.q : validLocation.x;
-              const targetR = validLocation.r !== undefined ? validLocation.r : validLocation.y;
-              
-              // Calculate direction as angle
-              const dx = targetQ - sourceQ;
-              const dy = targetR - sourceR;
-              const angle = Math.atan2(dy, dx);
-              
-              // Draw arrow
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 2;
-              
-              const arrowSize = hexSize * 0.25;
-              
-              // Draw arrow tip
-              ctx.beginPath();
-              ctx.moveTo(
-                screenX - Math.cos(angle) * arrowSize,
-                screenY - Math.sin(angle) * arrowSize
-              );
-              ctx.lineTo(
-                screenX - Math.cos(angle) * arrowSize + Math.cos(angle + Math.PI/6) * arrowSize,
-                screenY - Math.sin(angle) * arrowSize + Math.sin(angle + Math.PI/6) * arrowSize
-              );
-              ctx.lineTo(
-                screenX - Math.cos(angle) * arrowSize + Math.cos(angle - Math.PI/6) * arrowSize,
-                screenY - Math.sin(angle) * arrowSize + Math.sin(angle - Math.PI/6) * arrowSize
-              );
-              ctx.closePath();
-              ctx.fillStyle = '#ffffff';
-              ctx.fill();
-            }
-            
-            // Show movement cost
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(validLocation.cost, screenX, screenY + 3);
-            ctx.textAlign = 'start'; // Reset text align
-            
-            // Draw outline to make hex more visible
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
-            drawHexagonOutline(ctx, screenX, screenY, hexSize);
-          }
-        }
-        
-        // Highlight tile under mouse - now using hex coordinates
-        const mousePixelX = mouseX + cameraOffsetX;
-        const mousePixelY = mouseY + cameraOffsetY;
-        const mouseHexCoords = pixelToAxial(mousePixelX, mousePixelY, hexSize);
-        
-        if (mouseHexCoords.q === q && mouseHexCoords.r === r) {
-          ctx.strokeStyle = '#ffff00';
-          ctx.lineWidth = 2;
-          drawHexagonOutline(ctx, screenX, screenY, hexSize * 0.9);
-        }
+        // Draw cached tile
+        ctx.drawImage(cachedTile, screenX - hexSize, screenY - hexSize);
       } else if (fogOfWarEnabled) {
-        // Draw terrain but overlay with semi-transparent fog - with hexagons
+        // Draw terrain but overlay with semi-transparent fog
         const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
         ctx.fillStyle = terrainInfo.color;
         drawHexagon(ctx, screenX, screenY, hexSize, terrainInfo.color);
@@ -1121,4 +928,164 @@ export function render(gameState, canvasData) {
   const viewWidth = canvas.width * minimapScale;
   const viewHeight = canvas.height * minimapScale;
   minimapCtx.strokeRect(viewX, viewY, viewWidth, viewHeight);
+}
+
+// LoadingManager for handling loading states and progress
+export class LoadingManager {
+    constructor() {
+        this.overlay = null;
+        this.progressBar = null;
+        this.messageElement = null;
+        this.createOverlay();
+    }
+
+    createOverlay() {
+        // Create loading overlay if it doesn't exist
+        if (!this.overlay) {
+            this.overlay = document.createElement('div');
+            this.overlay.className = 'loading-overlay';
+            this.overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                display: none;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+            `;
+
+            const container = document.createElement('div');
+            container.className = 'loading-container';
+            container.style.cssText = `
+                background: #fff;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+                min-width: 300px;
+            `;
+
+            this.progressBar = document.createElement('div');
+            this.progressBar.className = 'loading-progress';
+            this.progressBar.style.cssText = `
+                width: 100%;
+                height: 20px;
+                background: #eee;
+                border-radius: 10px;
+                overflow: hidden;
+                margin: 10px 0;
+            `;
+
+            const progressFill = document.createElement('div');
+            progressFill.className = 'progress-fill';
+            progressFill.style.cssText = `
+                width: 0%;
+                height: 100%;
+                background: #4CAF50;
+                transition: width 0.3s ease-in-out;
+            `;
+            this.progressBar.appendChild(progressFill);
+
+            this.messageElement = document.createElement('div');
+            this.messageElement.className = 'loading-message';
+            this.messageElement.style.cssText = `
+                margin-top: 10px;
+                color: #333;
+                font-size: 14px;
+            `;
+
+            container.appendChild(this.progressBar);
+            container.appendChild(this.messageElement);
+            this.overlay.appendChild(container);
+            document.body.appendChild(this.overlay);
+        }
+    }
+
+    show() {
+        if (this.overlay) {
+            this.overlay.style.display = 'flex';
+        }
+    }
+
+    hide() {
+        if (this.overlay) {
+            this.overlay.style.display = 'none';
+        }
+    }
+
+    updateProgress(progress, message = '') {
+        if (this.progressBar && this.messageElement) {
+            const fill = this.progressBar.querySelector('.progress-fill');
+            if (fill) {
+                fill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+            }
+            if (message) {
+                this.messageElement.textContent = message;
+            }
+        }
+    }
+}
+
+// Update city list display
+export function updateCityList(gameState) {
+    const cityList = document.getElementById('cityList');
+    if (!cityList) return;
+
+    const currentPlayer = gameState.players[gameState.currentPlayer - 1];
+    const cities = currentPlayer.buildings.filter(b => b.type === 'city' || b.type === 'capital');
+
+    if (cities.length === 0) {
+        cityList.innerHTML = '<div class="no-cities">No cities founded yet</div>';
+        return;
+    }
+
+    cityList.innerHTML = cities.map(city => `
+        <div class="city-item">
+            <h4>${city.name}</h4>
+            <p>Population: ${city.population || 5}</p>
+            <p>Production: ${city.production || 'None'}</p>
+        </div>
+    `).join('');
+}
+
+// Update diplomacy status display
+export function updateDiplomacyStatus(gameState) {
+    const statusElement = document.getElementById('diplomacyStatus');
+    if (!statusElement) return;
+
+    const currentPlayer = gameState.players[gameState.currentPlayer - 1];
+    const status = currentPlayer.diplomacyStatus || 'Neutral';
+    
+    statusElement.textContent = status;
+}
+
+// Update building buttons by category
+export function updateBuildingButtonsByCategory(gameState, category, startBuilding) {
+    const buildingButtons = document.querySelector('.building-buttons');
+    if (!buildingButtons) return;
+
+    buildingButtons.innerHTML = '';
+    const player = gameState.players[gameState.currentPlayer - 1];
+
+    for (const [buildingType, building] of Object.entries(buildingTypes)) {
+        if (category !== 'all' && building.category !== category) continue;
+        
+        const button = document.createElement('button');
+        button.textContent = `${buildingType.replace(/_/g, ' ')} (${formatResourceCost(building.cost)})`;
+        button.onclick = () => startBuilding(buildingType);
+        
+        // Check if player can afford it
+        let canAfford = true;
+        for (const [resource, cost] of Object.entries(building.cost)) {
+            if ((player.resources[resource] || 0) < cost) {
+                canAfford = false;
+                break;
+            }
+        }
+        
+        button.disabled = !canAfford;
+        buildingButtons.appendChild(button);
+    }
 }

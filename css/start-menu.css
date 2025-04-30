@@ -1,5 +1,20 @@
 /* Start Menu and Settings Styles */
 
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100;
+    backdrop-filter: blur(3px);
+}
+
 /* Start Menu Overlay */
 .start-menu-overlay {
     position: fixed;
@@ -7,345 +22,35 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.85);
+    background: linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.95));
     z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 1; /* Set initial opacity to 1 */
 }
 
 .start-menu-container {
     background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
     width: 600px;
     max-width: 90%;
-    max-height: 90vh; /* Limit height to 90% of viewport height */
-    padding: 30px;
+    max-height: 90vh;
+    padding: 35px;
     position: relative;
-    animation: fadeIn 0.3s ease-out;
-    overflow-y: auto; /* Enable scrolling */
-}
-
-.start-menu-container h1 {
-    text-align: center;
-    color: #2d3748;
-    font-size: 36px;
-    margin-top: 0;
-    margin-bottom: 30px;
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-    position: relative;
-}
-
-.start-menu-container h1::after {
-    content: '';
-    position: absolute;
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100px;
-    height: 4px;
-    background: linear-gradient(90deg, #4a5568, #38b2ac);
-    border-radius: 2px;
-}
-
-.menu-section {
-    margin-bottom: 25px;
-}
-
-.menu-section h2 {
-    color: #4a5568;
-    font-size: 22px;
-    margin-bottom: 15px;
-    font-weight: 600;
-}
-
-/* Setting Groups */
-.setting-group {
-    margin-bottom: 15px;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Country Description */
-.country-description {
-    background-color: #f1f5f9;
-    border-left: 4px solid #38b2ac;
-    padding: 10px 15px;
-    margin-top: 5px;
-    margin-bottom: 15px;
-    border-radius: 0 4px 4px 0;
-    color: #4a5568;
-    font-style: italic;
-    line-height: 1.5;
-}
-
-.setting-group label {
-    font-weight: 600;
-    margin-bottom: 8px;
-    color: #4a5568;
-    font-size: 15px;
-}
-
-.setting-group select,
-.setting-group input[type="text"],
-.setting-group input[type="number"] {
-    padding: 12px;
-    border-radius: 4px;
-    border: 1px solid #e2e8f0;
-    background-color: #f8fafc;
-    font-size: 16px;
-    transition: all 0.2s;
-}
-
-.setting-group select:hover,
-.setting-group input[type="text"]:hover,
-.setting-group input[type="number"]:hover {
-    border-color: #a0aec0;
-    background-color: #fff;
-}
-
-.setting-group select:focus,
-.setting-group input[type="text"]:focus,
-.setting-group input[type="number"]:focus {
-    border-color: #38b2ac;
-    box-shadow: 0 0 0 3px rgba(56, 178, 172, 0.2);
-    background-color: #fff;
-}
-
-/* Checkbox Groups */
-.checkbox-group {
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-}
-
-.checkbox-group input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    accent-color: #38b2ac;
-}
-
-.checkbox-group label {
-    margin-bottom: 0;
-    cursor: pointer;
-}
-
-/* Button Styles */
-.menu-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.menu-buttons button {
-    padding: 12px 25px;
-    border-radius: 4px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-    min-width: 150px;
-}
-
-.menu-buttons .primary-button {
-    background: linear-gradient(90deg, #4a5568, #38b2ac);
-    color: white;
-    box-shadow: 0 4px 6px rgba(56, 178, 172, 0.25);
-}
-
-.menu-buttons .primary-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 8px rgba(56, 178, 172, 0.35);
-}
-
-.menu-buttons .primary-button:active {
-    transform: translateY(1px);
-    box-shadow: 0 2px 4px rgba(56, 178, 172, 0.25);
-}
-
-.menu-buttons button:not(.primary-button) {
-    background: #e2e8f0;
-    color: #4a5568;
-}
-
-.menu-buttons button:not(.primary-button):hover {
-    background: #edf2f7;
-    transform: translateY(-2px);
-}
-
-.menu-buttons button:not(.primary-button):active {
-    transform: translateY(1px);
-}
-
-/* Game Guide */
-.game-guide {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: #fff;
-    padding: 30px;
-    border-radius: 8px;
-    display: none;
+    opacity: 1; /* Set initial opacity to 1 */
+    transform: translateY(0); /* Start at final position */
+    animation: menuAppear 0.5s ease-out;
     overflow-y: auto;
-    z-index: 10;
+    scrollbar-width: thin;
+    scrollbar-color: #38b2ac #f0f0f0;
 }
 
-.game-guide h3 {
-    color: #2d3748;
-    font-size: 24px;
-    margin-top: 0;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.game-guide h4 {
-    color: #4a5568;
-    font-size: 18px;
-    margin-top: 20px;
-    margin-bottom: 10px;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 5px;
-}
-
-.game-guide p {
-    line-height: 1.6;
-    color: #4a5568;
-}
-
-.game-guide ul,
-.game-guide ol {
-    padding-left: 25px;
-    margin-bottom: 20px;
-}
-
-.game-guide li {
-    margin-bottom: 8px;
-    line-height: 1.5;
-}
-
-.game-guide button {
-    display: block;
-    margin: 25px auto 0;
-    padding: 10px 20px;
-    background: #4a5568;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.game-guide button:hover {
-    background: #38b2ac;
-    transform: translateY(-2px);
-}
-
-/* Settings Overlay (In-game) */
-.settings-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 1000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(3px);
-}
-
-.settings-container {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-    width: 500px;
-    max-width: 90%;
-    padding: 25px;
-    animation: fadeIn 0.3s ease-out;
-}
-
-.settings-container h2 {
-    text-align: center;
-    color: #2d3748;
-    font-size: 24px;
-    margin-top: 0;
-    margin-bottom: 20px;
-    position: relative;
-}
-
-.settings-container h2::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 80px;
-    height: 3px;
-    background: linear-gradient(90deg, #4a5568, #38b2ac);
-    border-radius: 2px;
-}
-
-/* Volume Sliders */
-.setting-group span {
-    margin-left: 10px;
-    font-weight: 600;
-    color: #4a5568;
-}
-
-.setting-group input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 8px;
-    border-radius: 4px;
-    background: #e2e8f0;
-    outline: none;
-    margin-top: 5px;
-}
-
-.setting-group input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #38b2ac;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.setting-group input[type="range"]::-webkit-slider-thumb:hover {
-    background: #2c9d98;
-    transform: scale(1.1);
-}
-
-.setting-group input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #38b2ac;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-}
-
-.setting-group input[type="range"]::-moz-range-thumb:hover {
-    background: #2c9d98;
-    transform: scale(1.1);
-}
-
-/* Animation */
-@keyframes fadeIn {
+@keyframes menuAppear {
     from {
         opacity: 0;
-        transform: translateY(-20px);
+        transform: translateY(20px);
     }
     to {
         opacity: 1;
@@ -353,26 +58,177 @@
     }
 }
 
-/* Ensure the menu buttons are always visible */
+.start-menu-container h1 {
+    text-align: center;
+    color: #2d3748;
+    font-size: 42px;
+    margin: 0 0 30px;
+    font-weight: 800;
+    background: linear-gradient(45deg, #2d3748, #38b2ac);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -1px;
+}
+
+.menu-section {
+    padding: 20px;
+    background: #f7fafc;
+    border-radius: 10px;
+    margin-bottom: 25px;
+}
+
+.menu-section h2 {
+    color: #2d3748;
+    font-size: 24px;
+    margin: 0 0 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.setting-group {
+    margin-bottom: 25px;
+}
+
+.setting-group:last-child {
+    margin-bottom: 0;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #4a5568;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.setting-group select,
+.setting-group input[type="text"],
+.setting-group input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 16px;
+    color: #2d3748;
+    background: white;
+    transition: all 0.2s;
+}
+
+.setting-group select:hover,
+.setting-group input[type="text"]:hover,
+.setting-group input[type="number"]:hover {
+    border-color: #38b2ac;
+}
+
+.setting-group select:focus,
+.setting-group input[type="text"]:focus,
+.setting-group input[type="number"]:focus {
+    border-color: #38b2ac;
+    box-shadow: 0 0 0 3px rgba(56, 178, 172, 0.2);
+    outline: none;
+}
+
+.setting-description {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #718096;
+    line-height: 1.4;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
 .menu-buttons {
     display: flex;
     justify-content: center;
     gap: 15px;
-    margin-top: 20px;
-    margin-bottom: 20px; /* Add bottom margin */
-    position: sticky; /* Make it sticky */
-    bottom: 0; /* Stick to bottom */
-    background: #fff; /* Ensure it's visible against content */
-    padding: 10px 0; /* Add some padding */
-    z-index: 5; /* Ensure it's above other content */
+    margin-top: 30px;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 20px 0;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.05);
 }
 
-/* Responsive Adjustments */
+.menu-buttons button {
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.primary-button {
+    background: #38b2ac;
+    color: white;
+    border: none;
+}
+
+.primary-button:hover {
+    background: #2c9d98;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(56, 178, 172, 0.3);
+}
+
+.menu-buttons button:not(.primary-button) {
+    background: #edf2f7;
+    color: #4a5568;
+    border: 2px solid #e2e8f0;
+}
+
+.menu-buttons button:not(.primary-button):hover {
+    background: #e2e8f0;
+    transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Media Queries for Responsive Design */
 @media (max-width: 640px) {
     .start-menu-container,
     .settings-container {
         padding: 20px;
-        max-height: 85vh; /* Slightly smaller on mobile */
+        max-height: 85vh;
     }
     
     .menu-buttons {
@@ -393,4 +249,23 @@
         padding: 10px;
         font-size: 14px;
     }
+}
+
+/* Scrollbar Styling */
+.start-menu-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.start-menu-container::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+.start-menu-container::-webkit-scrollbar-thumb {
+    background: #38b2ac;
+    border-radius: 4px;
+}
+
+.start-menu-container::-webkit-scrollbar-thumb:hover {
+    background: #2c9d98;
 }

@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/actions-tab-fix.css">
 </head>
 <body>
-  <div id="gameContainer">
+  <div id="gameContainer" style="display: none;">
     <div id="canvasContainer">
       <canvas id="gameCanvas" width="800" height="600"></canvas>
       <canvas id="minimap" width="150" height="150"></canvas>
@@ -37,18 +37,18 @@
         <div class="upkeep-list" id="upkeepList">None</div>
       </div>
       
-      <div class="tab-container">
-        <div class="tab active" data-tab="actions">Actions</div>
-        <div class="tab" data-tab="cities">Cities</div>
-        <div class="tab" data-tab="research">Research</div>
-        <div class="tab" data-tab="units">Units</div>
-        <div class="tab" data-tab="diplomacy">Diplomacy</div>
+      <div class="tab-container" role="tablist">
+        <div class="tab active" role="tab" aria-selected="true" aria-controls="actions-tab" data-tab="actions" tabindex="0">Actions</div>
+        <div class="tab" role="tab" aria-selected="false" aria-controls="cities-tab" data-tab="cities" tabindex="0">Cities</div>
+        <div class="tab" role="tab" aria-selected="false" aria-controls="research-tab" data-tab="research" tabindex="0">Research</div>
+        <div class="tab" role="tab" aria-selected="false" aria-controls="units-tab" data-tab="units" tabindex="0">Units</div>
+        <div class="tab" role="tab" aria-selected="false" aria-controls="diplomacy-tab" data-tab="diplomacy" tabindex="0">Diplomacy</div>
       </div>
       
-      <div class="tab-content active" id="actions-tab">
-        <button onclick="window.endTurn()">End Turn</button>
-        <button onclick="window.advanceAge()" id="advanceAgeBtn">Advance Age</button>
-        <div class="progress-container">
+      <div class="tab-content active" id="actions-tab" role="tabpanel" aria-labelledby="actions-tab">
+        <button onclick="window.endTurn()" aria-label="End current turn">End Turn</button>
+        <button onclick="window.advanceAge()" id="advanceAgeBtn" aria-label="Advance to next age">Advance Age</button>
+        <div class="progress-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
           <div class="progress-bar" id="ageProgressBar"></div>
           <div class="progress-label" id="ageProgressLabel">Age Progress: 0%</div>
         </div>
@@ -70,9 +70,10 @@
         <div id="buildings-section" style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 20px; border: 2px solid #4a5568;">
           <h3 style="margin-top: 0; padding: 10px; background: #4a5568; color: white; border-radius: 8px; text-align: center; font-size: 18px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">Construct Building</h3>
           
-          <!-- Building filter -->
           <div style="margin: 15px 0; display: block !important;">
-            <select id="buildingCategoryFilter" onchange="window.filterBuildingsByCategory()" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e0; background-color: white;">
+            <select id="buildingCategoryFilter" onchange="window.filterBuildingsByCategory()" 
+                    style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e0; background-color: white;"
+                    aria-label="Filter buildings by category">
               <option value="all">All Buildings</option>
               <option value="resource_node">Resource Buildings</option>
               <option value="production">Production Buildings</option>
@@ -81,11 +82,13 @@
               <option value="housing">Housing</option>
             </select>
           </div>
-          
-          <!-- Simple building buttons that are guaranteed to display -->
+
           <div id="simple-building-buttons" style="margin-bottom: 20px;">
             <h4 style="margin: 10px 0; color: #4a5568;">Quick Build Options:</h4>
-            <button onclick="window.startBuilding('farm')" style="background-color: #68d391; color: #234e52; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
+            <button onclick="window.startBuilding('farm')" 
+                    style="background-color: #68d391; color: #234e52; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;"
+                    aria-label="Build Farm - Costs 50 Wood"
+                    data-tooltip="Build a Farm to produce food">
               Build Farm (50 Wood)
             </button>
             <button onclick="window.startBuilding('house')" style="background-color: #4299e1; color: #2a4365; font-weight: bold; width: 100%; margin: 5px 0; padding: 12px;">
@@ -98,64 +101,61 @@
               Build Hunter's Hut (40 Wood)
             </button>
           </div>
-          
-          <!-- Building buttons container with simplied styling -->
-          <div class="building-buttons" style="max-height: 400px; overflow-y: auto; border: 1px solid #cbd5e0; padding: 15px; border-radius: 8px; background-color: white;">
-            <div id="building-menu-loading" style="padding: 20px; text-align: center; color: #4a5568; font-weight: bold;">
+
+          <div class="building-buttons" style="max-height: 400px; overflow-y: auto; border: 1px solid #cbd5e0; padding: 15px; border-radius: 8px; background-color: white;"
+               role="list" aria-label="Available buildings">
+            <div id="building-menu-loading" style="padding: 20px; text-align: center; color: #4a5568; font-weight: bold;"
+                 role="status" aria-live="polite">
               Building menu is being loaded...
             </div>
-            <!-- Building buttons will be populated dynamically -->
           </div>
         </div>
       </div>
       
-      <div class="tab-content" id="cities-tab">
+      <div class="tab-content" id="cities-tab" role="tabpanel" aria-labelledby="cities-tab">
         <h3>Your Cities</h3>
-        <div id="cityList">
-          <!-- City list will be populated dynamically -->
-          <div class="no-cities">No cities founded yet</div>
+        <div id="cityList" role="list" aria-label="List of your cities">
+          <div class="no-cities" role="status" aria-live="polite">No cities founded yet</div>
         </div>
         <div class="production-queue">
           <h3>Production Queues</h3>
           <div class="building-queue">
             <h4>Building Queue</h4>
-            <div id="buildingQueueList">
-              <!-- Building queue items will be populated dynamically -->
-              <div class="empty-queue">No buildings in queue</div>
+            <div id="buildingQueueList" role="list" aria-label="Building construction queue">
+              <div class="empty-queue" role="status" aria-live="polite">No buildings in queue</div>
             </div>
           </div>
           <div class="unit-queue">
             <h4>Unit Queue</h4>
-            <div id="unitQueueList">
-              <!-- Unit queue items will be populated dynamically -->
-              <div class="empty-queue">No units in queue</div>
+            <div id="unitQueueList" role="list" aria-label="Unit production queue">
+              <div class="empty-queue" role="status" aria-live="polite">No units in queue</div>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="tab-content" id="research-tab">
+      <div class="tab-content" id="research-tab" role="tabpanel" aria-labelledby="research-tab">
         <h3>Research Technology</h3>
-        <div class="tech-tree-toggle" onclick="window.toggleTechTree()">Show/Hide Tech Tree</div>
-        <div class="tech-tree" id="techTree"></div>
-        <div class="research-buttons" id="researchButtons"></div>
-        <div class="progress-container">
+        <div class="tech-tree-toggle" onclick="window.toggleTechTree()" 
+             role="button" tabindex="0" aria-expanded="false">Show/Hide Tech Tree</div>
+        <div class="tech-tree" id="techTree" role="tree" aria-label="Technology tree"></div>
+        <div class="research-buttons" id="researchButtons" role="list" aria-label="Available research options"></div>
+        <div class="progress-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
           <div class="progress-bar" id="researchProgressBar"></div>
           <div class="progress-label" id="researchProgressLabel">Research Progress: 0%</div>
         </div>
       </div>
       
-      <div class="tab-content" id="units-tab">
+      <div class="tab-content" id="units-tab" role="tabpanel" aria-labelledby="units-tab">
         <h3>Produce Unit</h3>
         <div class="unit-production-container">
           <div>
-            <h4>Production Building</h4>
-            <select id="productionBuildingSelector">
+            <h4 id="production-building-label">Production Building</h4>
+            <select id="productionBuildingSelector" aria-labelledby="production-building-label">
               <option value="">Select a production building</option>
-              <!-- Building options will be populated dynamically -->
             </select>
           </div>
-          <div class="unit-buttons" id="unitButtons"></div>
+          <div class="unit-buttons" id="unitButtons" role="list" aria-label="Available units for production"></div>
         </div>
       </div>
       

@@ -1,17 +1,37 @@
-import { resourceTileTypes } from './resources.js';
-
-// Define terrain types
 export const terrainTypes = {
-  plains: { color: '#8BC34A', moveCost: 1, description: 'Default easy terrain' },
-  water: { color: '#2196F3', moveCost: null, description: 'Only naval transports & ships may enter' },
-  mountain: { color: '#9E9E9E', moveCost: null, description: 'Impassable to ground units; air may overfly' },
-  forest: { color: '#33691E', moveCost: 2, description: 'Slows infantry/cavalry; offers cover' },
-  desert: { color: '#FFC107', moveCost: 2, description: 'Harsh; non-desert units pay full cost' },
-  hills: { color: '#795548', moveCost: 2, description: 'Grants vision bonus; costs extra effort' },
-  river: { color: '#87CEEB', moveCost: 2, description: 'Land units only at bridges/fords; else impassable' },
-  tundra: { color: '#E0FFFF', moveCost: 2, description: 'Same as Forest for simplicity' },
-  ...resourceTileTypes
+    plains: {
+        name: "Plains",
+        color: "#90EE90",
+        movementCost: 1,
+        defenseBonus: 0,
+        description: "Flat grassland, ideal for farming"
+    },
+    forest: {
+        name: "Forest",
+        color: "#228B22",
+        movementCost: 2,
+        defenseBonus: 25,
+        description: "Dense forest, good for lumber"
+    },
+    mountain: {
+        name: "Mountain",
+        color: "#808080",
+        movementCost: 3,
+        defenseBonus: 50,
+        description: "Rocky terrain with valuable minerals"
+    },
+    water: {
+        name: "Water",
+        color: "#4169E1",
+        movementCost: null,
+        defenseBonus: -25,
+        description: "Impassable except for naval units"
+    },
+    desert: {
+        name: "Desert",
+        color: "#F4A460",
+        movementCost: 2,
+        defenseBonus: -10,
+        description: "Arid land with scarce resources"
+    }
 };
-
-// Compatibility for existing 'land' terrain references
-terrainTypes.land = terrainTypes.plains;

@@ -3,79 +3,99 @@ import { mapSize } from './constants.js';
 import { generateMap } from './map.js';
 import { toggleFogOfWar, setAIDifficulty } from './gameEvents.js';
 import { countries, getCountryByName } from './countries.js';
+import { validateGameState, cleanGameState } from './errorHandling.js';
+import { createInitialGameState } from './gameState.js';
 
-/**
- * Generate a new game with selected settings
- * @param {Object} gameState - The game state
- * @param {Object} settings - The selected game settings
- * @returns {Object} - Updated game state
- */
 export function startNewGame(gameState, settings) {
     console.log('Starting new game with settings:', settings);
     
     try {
-        // Apply settings to gameState
-        gameState.mapSize = settings.mapSize;
-        gameState.mapType = settings.mapType;
-        gameState.gameStarted = true;
-        gameState.fogOfWarEnabled = settings.fogOfWar;
-        gameState.aiDifficulty = settings.aiDifficulty;
-        gameState.resourceDensity = settings.resourceDensity;
-        gameState.aiPlayerCount = settings.aiPlayerCount || 1; // Default to 1 if not specified
-        
-        // Apply selected country to human player (index 0)
-        if (settings.playerCountry && gameState.players.length > 0) {
-            // Set player faction and update name
-            gameState.players[0].faction = settings.playerCountry.name;
-            gameState.players[0].name = `Player (${settings.playerCountry.flag} ${settings.playerCountry.name})`;
+        // Validate settings before applying
+        if (!settings || !settings.mapSize || !settings.mapType) {
+            throw new Error('Invalid game settings provided');
         }
+
+        // Create backup of current state
+        const previousState = JSON.parse(JSON.stringify(gameState));
         
-        // Set AI players active or inactive based on selected count
-        for (let i = 1; i < gameState.players.length; i++) {
-            // Player index 0 is human player, indices 1+ are AI players
-            if (i <= gameState.aiPlayerCount) {
-                // Activate this AI player
-                gameState.players[i].inactive = false;
-            } else {
-                // Deactivate this AI player
-                gameState.players[i].inactive = true;
-            }
-        }
-        
-        console.log('Generating map...');
-        
-        // Generate map with selected settings
         try {
-            gameState = generateMap(gameState);
-            console.log('Map generation complete');
-        } catch (mapError) {
-            console.error('Error during map generation:', mapError);
-            alert('There was an error generating the map. Please try again.');
-            return gameState; // Return without hiding start menu
+            // Validate initial game state
+            const initialValidation = validateGameState(gameState);
+            if (!initialValidation.isValid) {
+                console.error('Initial game state validation failed:', initialValidation.errors);
+                gameState = createInitialGameState(); // Reset to fresh state
+            }
+
+            // Apply settings to gameState
+            gameState.mapSize = settings.mapSize;
+            gameState.mapType = settings.mapType;
+            gameState.gameStarted = true;
+            gameState.fogOfWarEnabled = settings.fogOfWar;
+            gameState.aiDifficulty = settings.aiDifficulty;
+            gameState.resourceDensity = settings.resourceDensity;
+            gameState.aiPlayerCount = settings.aiPlayerCount || 1;
+            gameState.useNewGenerator = settings.useNewMapGenerator || false;
+            gameState.mapSeed = settings.mapSeed;
+
+            // Apply selected country to human player
+            if (settings.playerCountry && gameState.players && gameState.players.length > 0) {
+                gameState.players[0].faction = settings.playerCountry.name;
+                gameState.players[0].name = `Player (${settings.playerCountry.flag} ${settings.playerCountry.name})`;
+            }
+            
+            // Set AI players active/inactive
+            if (gameState.players) {
+                for (let i = 1; i < gameState.players.length; i++) {
+                    gameState.players[i].inactive = i > gameState.aiPlayerCount;
+                }
+            }
+            
+            // Generate map with error handling and recovery
+            console.log('Generating map...');
+            try {
+                gameState = generateMap(gameState);
+                
+                // Validate the generated game state
+                const validationResult = validateGameState(gameState);
+                if (!validationResult.isValid) {
+                    throw new Error(`Invalid game state after map generation: ${validationResult.errors.join(', ')}`);
+                }
+            } catch (mapError) {
+                console.error('Map generation failed:', mapError);
+                // Clean up the game state
+                gameState = cleanGameState(gameState);
+                // Restore previous state and try again with different seed
+                if (!settings.mapSeed) {
+                    settings.mapSeed = Math.floor(Math.random() * 1000000);
+                    console.log('Retrying map generation with new seed:', settings.mapSeed);
+                    gameState = generateMap(gameState);
+                } else {
+                    throw new Error('Failed to generate map with provided seed');
+                }
+            }
+            
+            // Hide start menu
+            const startMenuOverlay = document.getElementById('startMenuOverlay');
+            if (startMenuOverlay) {
+                startMenuOverlay.style.display = 'none';
+            }
+
+            // Show game container
+            const gameContainer = document.getElementById('gameContainer');
+            if (gameContainer) {
+                gameContainer.style.display = 'flex';
+            }
+            
+            return gameState;
+        } catch (error) {
+            console.error('Error during game initialization:', error);
+            // Restore previous state
+            gameState = previousState;
+            throw error;
         }
-        
-        // Find and hide the start menu overlay
-        const startMenuOverlay = document.getElementById('startMenuOverlay');
-        if (startMenuOverlay) {
-            startMenuOverlay.style.display = 'none';
-            console.log('Start menu overlay hidden');
-        } else {
-            console.error('Start menu overlay element not found');
-        }
-        
-        // If game container exists, make it visible
-        const gameContainer = document.getElementById('gameContainer');
-        if (gameContainer) {
-            gameContainer.style.display = 'flex';
-            console.log('Game container now visible');
-        } else {
-            console.error('Game container element not found');
-        }
-        
-        return gameState;
     } catch (error) {
         console.error('Critical error in startNewGame:', error);
-        alert('There was an error starting the game. Please try again.');
+        alert('Failed to start new game. Please try again with different settings.');
         return gameState;
     }
 }
@@ -100,19 +120,21 @@ export function initStartMenu(startGameCallback) {
     // Create a fresh start menu UI
     createStartMenuUI();
     
-    // Make sure the game container is hidden when showing the start menu
-    const gameContainer = document.getElementById('gameContainer');
-    if (gameContainer) {
-        gameContainer.style.display = 'none';
-    }
-    
-    // Show the start menu explicitly
+    // Ensure proper display state
     const overlay = document.getElementById('startMenuOverlay');
+    const gameContainer = document.getElementById('gameContainer');
+    
     if (overlay) {
         overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
         console.log('Start menu overlay is visible');
     } else {
         console.error('Failed to create start menu overlay');
+        return;
+    }
+    
+    if (gameContainer) {
+        gameContainer.style.display = 'none';
     }
     
     // Setup event handlers
