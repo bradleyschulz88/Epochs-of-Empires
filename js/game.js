@@ -1,7 +1,7 @@
 import { tileSize } from './modules/constants.js';
 import { initStartMenu, startNewGame, showSettingsMenu } from './modules/startMenu.js';
 import { createInitialGameState } from './modules/gameState.js';
-import { generateMap } from './modules/map.js';
+import { generateMap, revealArea } from './modules/map.js';
 import { render, updateResourceDisplay, updateUpkeepDisplay, updateUnitButtons, updateResearchButtons, updateBuildingButtons, updateAgeProgressDisplay, showNotification, getUnitTooltipContent, LoadingManager } from './modules/ui.js';
 import { Viewport } from './modules/viewport.js';
 import { SpatialPartition } from './modules/spatial.js';
@@ -13,6 +13,15 @@ import { buildingTypes } from './modules/buildings.js';
 import { unitTypes } from './modules/units.js';
 import { resourcesByAge, resourceTileTypes } from './modules/resources.js';
 import { updateBuildingButtonsByCategory } from './modules/buildingManager.js';
+
+// Make functions globally available for cross-module usage
+window.revealArea = revealArea;
+window.attackUnit = attackUnit;
+window.updateUnitActionsPanel = updateUnitActionsPanel;
+window.canMoveToTile = canMoveToTile;
+window.moveUnitSystem = moveUnitSystem;
+window.unitTypes = unitTypes;
+window.toggleFogOfWar = toggleFogOfWar;
 import { 
   endTurn, 
   startResearch, 
@@ -25,7 +34,6 @@ import {
   buildStructure,
   processProductionQueues
 } from './modules/gameEvents.js';
-import { revealArea } from './modules/map.js';
 import {
   moveUnit as moveUnitSystem,
   canMoveToTile,
@@ -211,6 +219,20 @@ function setupEventHandlers(gameState, viewport, gameLoop) {
             }
         });
     });
+    
+    // Initialize fog of war toggle
+    const fogToggleBtn = document.getElementById('fogToggle');
+    if (fogToggleBtn) {
+        fogToggleBtn.addEventListener('click', () => {
+            if (typeof toggleFogOfWar === 'function') {
+                toggleFogOfWar(gameState);
+                showNotification(`Fog of War: ${gameState.fogOfWarEnabled ? 'Enabled' : 'Disabled'}`);
+                debouncedRender();
+            } else {
+                console.error("toggleFogOfWar function not found");
+            }
+        });
+    }
 }
 
 // Track the currently hovered tile for UI highlighting
@@ -344,8 +366,16 @@ function revealTile(x, y) {
   const playerIndex = gameState.currentPlayer - 1;
   const revealRadius = 2; // Small reveal radius for clicked tiles
   
-  // Use the revealArea function from map.js module
-  revealArea(gameState, x, y, revealRadius, playerIndex);
+  // Import revealArea function from map.js if needed
+  if (typeof revealArea === 'undefined') {
+    // Use the imported function directly
+    import('./modules/map.js').then(mapModule => {
+      mapModule.revealArea(gameState, x, y, revealRadius, playerIndex);
+    });
+  } else {
+    // Use the already imported function
+    revealArea(gameState, x, y, revealRadius, playerIndex);
+  }
   
   // Also check if there's a unit selected
   if (selectedUnit) {
@@ -416,9 +446,36 @@ function handleCanvasClick(e) {
 
   const clickedTile = gameState.map[gridY][gridX];
   
-  // Skip interaction with undiscovered tiles - fog only disappears when a unit uncovers it
+  // For undiscovered tiles, we'll still allow some interactions
   if (!clickedTile.discovered[gameState.currentPlayer - 1]) {
-    showNotification("This area is covered by fog of war. Send units to explore.");
+    // If a unit is selected, try to move there (to explore the fog)
+    if (selectedUnit) {
+      // When a unit is selected and player clicks on fog, try to move to that tile
+      const moveResult = canMoveToTile(selectedUnit, selectedUnit.x, selectedUnit.y, gridX, gridY, gameState.map, true);
+      
+      if (moveResult.canMove) {
+        // Valid move - proceed with movement to explore fog of war
+        moveUnitSystem(selectedUnit, gridX, gridY, gameState.map, (message) => {
+          showNotification(message);
+        });
+        showNotification(`Unit moving to explore area at (${gridX}, ${gridY})`);
+        
+        // Update the UI
+        updateUnitActionsPanel(selectedUnit);
+        
+        // Also reveal the area that the unit is moving to
+        revealTile(gridX, gridY);
+      } else {
+        // Can't move but tell the player what's wrong
+        showNotification(`Cannot move to that location: ${moveResult.reason}`);
+      }
+    } else {
+      // No unit selected but still provide information
+      showNotification("This area is covered by fog of war. Select a unit to explore it.");
+    }
+    
+    // Still render the map after the interaction
+    debouncedRender();
     return;
   }
   

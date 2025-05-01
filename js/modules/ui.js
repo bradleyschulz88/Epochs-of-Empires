@@ -416,8 +416,16 @@ function drawTerrainFeatures(tile, ctx, x, y) {
 function drawBuilding(building, ctx, x, y) {
   const size = TILE_SIZE * 0.7;
   
+  // Add null check for building
+  if (!building || typeof building !== 'object') {
+    console.error("Invalid building object:", building);
+    return;
+  }
+  
   let color = '#f55';
-  switch(building.type) {
+  const buildingType = building.type || 'unknown';
+  
+  switch(buildingType) {
     case 'farm': color = '#8fc31f'; break;
     case 'mine': case 'iron_mine': case 'gold_mine': color = '#7f7f7f'; break;
     case 'logging_camp': color = '#8d6e63'; break;
@@ -438,11 +446,21 @@ function drawBuilding(building, ctx, x, y) {
   ctx.font = '8px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(building.type.substring(0, 3).toUpperCase(), x, y);
+  
+  // Safe access to building type
+  const displayText = buildingType.substring(0, 3).toUpperCase();
+  ctx.fillText(displayText, x, y);
 }
 
 function drawBuildingInProgress(building, ctx, x, y) {
+  // Add null check for building
+  if (!building || typeof building !== 'object') {
+    console.error("Invalid building in progress:", building);
+    return;
+  }
+  
   const size = TILE_SIZE * 0.6;
+  const buildingType = building.type || 'unknown';
   
   ctx.setLineDash([3, 3]);
   ctx.strokeStyle = '#555';
@@ -460,10 +478,19 @@ function drawBuildingInProgress(building, ctx, x, y) {
   
   ctx.fillStyle = '#fff';
   ctx.font = '8px Arial';
-  ctx.fillText(building.type.substring(0, 3), x, y);
+  
+  // Safe access to building type
+  const displayText = buildingType.substring(0, 3);
+  ctx.fillText(displayText, x, y);
 }
 
 function drawUnit(unit, ctx, x, y, currentPlayer) {
+  // Add null check for unit
+  if (!unit || typeof unit !== 'object') {
+    console.error("Invalid unit object:", unit);
+    return;
+  }
+
   const unitSize = TILE_SIZE * 0.6;
   const isCurrentPlayerUnit = unit.owner === currentPlayer;
   
@@ -479,8 +506,11 @@ function drawUnit(unit, ctx, x, y, currentPlayer) {
   ctx.lineWidth = isCurrentPlayerUnit ? 2 : 1;
   ctx.stroke();
   
-  let unitSymbol = unit.type.charAt(0).toUpperCase();
-  switch(unit.type.toLowerCase()) {
+  // Safely get unit type
+  const unitType = unit.type || 'unknown';
+  
+  let unitSymbol = unitType.charAt(0).toUpperCase();
+  switch(unitType.toLowerCase()) {
     case 'warrior': unitSymbol = '⚔️'; break;
     case 'settler': unitSymbol = '🏠'; break;
     case 'archer': unitSymbol = '🏹'; break;
@@ -509,14 +539,37 @@ function drawUnit(unit, ctx, x, y, currentPlayer) {
 
 function drawTile(tile, ctx, x, y, gameState, fogOfWarEnabled, waterPattern, isHovered = false) {
   const playerIndex = gameState.currentPlayer - 1;
-  const isDiscovered = tile.discovered && tile.discovered[playerIndex];
   
-  if (fogOfWarEnabled && !isDiscovered) {
+  // More robust check for discovered status
+  let isDiscovered = false;
+  try {
+    // Check if the tile has a discovered property and if the current player has discovered it
+    isDiscovered = tile.discovered && 
+                  Array.isArray(tile.discovered) && 
+                  tile.discovered.length > playerIndex && 
+                  tile.discovered[playerIndex] === true;
+  } catch (e) {
+    console.error("Error checking discovered status:", e);
+  }
+  
+  // Explicitly check fog of war condition
+  if (fogOfWarEnabled === true && isDiscovered !== true) {
+    // Draw fog of war with our new tile size
     ctx.fillStyle = '#333';
     ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+    
+    // Draw a subtle fog pattern
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    for (let i = 0; i < TILE_SIZE; i += 10) {
+      for (let j = 0; j < TILE_SIZE; j += 10) {
+        if ((i + j) % 20 === 0) {
+          ctx.fillRect(x + i, y + j, 5, 5);
+        }
+      }
+    }
     return;
   }
   
@@ -584,9 +637,20 @@ function drawTile(tile, ctx, x, y, gameState, fogOfWarEnabled, waterPattern, isH
 
 function drawMinimapTile(tile, minimapCtx, tileSize, gameState, fogOfWarEnabled) {
   const playerIndex = gameState.currentPlayer - 1;
-  const isDiscovered = tile.discovered && tile.discovered[playerIndex];
   
-  if (fogOfWarEnabled && !isDiscovered) {
+  // More robust check for discovered status (matches main tile rendering)
+  let isDiscovered = false;
+  try {
+    isDiscovered = tile.discovered && 
+                  Array.isArray(tile.discovered) && 
+                  tile.discovered.length > playerIndex && 
+                  tile.discovered[playerIndex] === true;
+  } catch (e) {
+    console.error("Error checking discovered status for minimap:", e);
+  }
+  
+  // Explicitly check fog of war condition
+  if (fogOfWarEnabled === true && isDiscovered !== true) {
     minimapCtx.fillStyle = '#333';
   } else {
     const terrainInfo = terrainTypes[tile.type] || terrainTypes.plains;
@@ -615,6 +679,13 @@ function drawMinimapViewport(minimap, minimapCtx, canvas, cameraX, cameraY, tile
 }
 
 function drawSelectedUnit(selectedUnit, ctx, offsetX, offsetY) {
+  // Add null check for selectedUnit and its properties
+  if (!selectedUnit || typeof selectedUnit !== 'object' || 
+      typeof selectedUnit.x !== 'number' || typeof selectedUnit.y !== 'number') {
+    console.error("Invalid selected unit:", selectedUnit);
+    return;
+  }
+  
   const tileX = selectedUnit.x * TILE_SIZE - offsetX;
   const tileY = selectedUnit.y * TILE_SIZE - offsetY;
   
