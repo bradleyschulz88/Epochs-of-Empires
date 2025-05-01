@@ -6,11 +6,13 @@ import { render, updateResourceDisplay, updateUpkeepDisplay, updateUnitButtons, 
 import { Viewport } from './modules/viewport.js';
 import { SpatialPartition } from './modules/spatial.js';
 import { ErrorHandler } from './modules/errorHandling.js';
+import { EventHandler } from './modules/eventHandler.js';
 import { GameLoopManager } from './modules/gameLoop.js';
 import { terrainTypes } from './modules/terrain.js';
 import { buildingTypes } from './modules/buildings.js';
 import { unitTypes } from './modules/units.js';
 import { resourcesByAge, resourceTileTypes } from './modules/resources.js';
+import { updateBuildingButtonsByCategory } from './modules/buildingManager.js';
 import { 
   endTurn, 
   startResearch, 
@@ -33,6 +35,7 @@ import {
   initializeUnitMovement,
   getValidMovementLocations
 } from './modules/movement.js';
+import { pixelToAxial } from './modules/hexgrid.js';
 
 // Game canvas and context
 let canvas = null;
@@ -77,11 +80,10 @@ window.onload = async function() {
         }
         minimapCtx = minimap.getContext('2d');
         
-        // Set initial canvas sizes
-        canvas.width = window.innerWidth - 400; // Leave space for UI
-        canvas.height = window.innerHeight - 50; // Leave space for header
-        minimap.width = 150;
-        minimap.height = 150;
+        // Create initial game state
+        loadingManager.updateProgress(40, "Creating game state...");
+        gameState = createInitialGameState();
+        window.gameState = gameState;
         
         // Hide game container initially
         const gameContainer = document.getElementById('gameContainer');
@@ -89,12 +91,8 @@ window.onload = async function() {
             gameContainer.style.display = 'none';
         }
         
-        // Create initial game state
-        loadingManager.updateProgress(40, "Creating game state...");
-        gameState = createInitialGameState();
-        window.gameState = gameState;
-        
         loadingManager.updateProgress(80, "Initializing start menu...");
+        
         // Initialize start menu
         initStartMenu(startGame);
         
@@ -126,9 +124,33 @@ function debounce(func, wait) {
   };
 }
 
+// Make modules accessible globally
+window.gameModules = {
+  ui: null, // Will be filled in during setup
+  viewport: null
+};
+
 // Cache DOM elements
-const debouncedRender = debounce(() => {
+// Make debouncedRender available globally
+window.debouncedRender = debounce(() => {
     if (!gameStarted) return;
+    
+    // Get current viewport values if available
+    let viewportData = {};
+    if (window.gameModules.viewport) {
+        const viewport = window.gameModules.viewport;
+        viewportData = {
+            cameraOffsetX: viewport.offsetX,
+            cameraOffsetY: viewport.offsetY,
+            scale: viewport.scale
+        };
+    } else {
+        viewportData = {
+            cameraOffsetX: cameraOffsetX,
+            cameraOffsetY: cameraOffsetY,
+            scale: 1
+        };
+    }
     
     const canvasData = {
         canvas,
@@ -141,14 +163,22 @@ const debouncedRender = debounce(() => {
         selectedUnit,
         mouseX,
         mouseY,
-        cameraOffsetX,
-        cameraOffsetY
+        ...viewportData
     };
     
     render(gameState, canvasData);
 }, 16); // ~60fps
 
 function setupEventHandlers(gameState, viewport, gameLoop) {
+    // Store references to modules in global scope for cross-module access
+    window.gameModules.viewport = viewport;
+    window.gameModules.ui = {
+        setHoveredTile: setHoveredTile,
+        animateTileClick: animateTileClick,
+        TILE_SIZE: 50,
+        TILE_GUTTER: 3
+    };
+    
     const eventHandler = new EventHandler(gameState, viewport);
     
     // Additional game-specific event handlers
@@ -170,6 +200,49 @@ function setupEventHandlers(gameState, viewport, gameLoop) {
             switchTab(currentTab);
         });
     });
+    
+    // Initialize tab handlers from selectors
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            if (tabName) {
+                currentTab = tabName;
+                switchTab(currentTab);
+            }
+        });
+    });
+}
+
+// Track the currently hovered tile for UI highlighting
+function setHoveredTile(x, y) {
+    // This function will be provided to the UI module
+    // The UI module will call this when it detects a hover
+    if (window.gameModules.ui) {
+        window.gameModules.ui.hoveredTileX = x;
+        window.gameModules.ui.hoveredTileY = y;
+    }
+    debouncedRender();
+}
+
+// Handle tile click animation
+function animateTileClick(x, y) {
+    // This function will be provided to the UI module
+    // The UI module will call this when a tile is clicked
+    // We'll use it to animate UI effects for clicked tiles
+    if (x === null || y === null) return;
+    
+    // Trigger a visual feedback when a tile is clicked
+    const clickEffect = {
+        x: x,
+        y: y,
+        timestamp: performance.now()
+    };
+    
+    if (window.gameModules.ui) {
+        window.gameModules.ui.lastClickedTile = clickEffect;
+    }
+    
+    debouncedRender();
 }
 
 // Function to switch between UI tabs
@@ -277,16 +350,18 @@ function revealTile(x, y) {
   // Also check if there's a unit selected
   if (selectedUnit) {
     // When a unit is selected and player clicks on fog, also allow moving to that tile
-    const moveResult = canMoveToTile(selectedUnit, selectedUnit.x, selectedUnit.y, x, y, gameState.map, true);
-    
-    if (moveResult.canMove) {
-      // Valid move - proceed with movement automatically after revealing
-      moveUnit(selectedUnit, x, y);
-      showNotification(`Unit moved to the newly revealed location`);
-      
-      // Make sure we update the unit panel if it's still showing
-      updateUnitActionsPanel(selectedUnit);
-    }
+        const moveResult = canMoveToTile(selectedUnit, selectedUnit.x, selectedUnit.y, x, y, gameState.map, true);
+        
+        if (moveResult.canMove) {
+          // Valid move - proceed with movement automatically after revealing
+          moveUnitSystem(selectedUnit, x, y, gameState.map, (message) => {
+            showNotification(message);
+          });
+          showNotification(`Unit moved to the newly revealed location`);
+          
+          // Make sure we update the unit panel if it's still showing
+          updateUnitActionsPanel(selectedUnit);
+        }
   }
   
   showNotification(`Area revealed at (${x}, ${y})`);
@@ -350,7 +425,7 @@ function handleCanvasClick(e) {
   // If we're trying to build something
   if (gameState.selectedBuildingType) {
     buildStructure(gameState, gridX, gridY);
-    renderGame();
+    debouncedRender();
     return;
   }
   
@@ -366,8 +441,108 @@ function handleCanvasClick(e) {
   const isDoubleClickOnUnit = clickedTile.unit && clickedTile.unit === selectedUnit;
   
   if (!clickedTile.building && !clickedTile.buildingInProgress && (!clickedTile.unit || isDoubleClickOnUnit)) {
+    // Call the showBuildingSuggestion function
     showBuildingSuggestion(clickedTile, gridX, gridY);
   }
+
+// Function to show building suggestion UI
+function showBuildingSuggestion(tile, x, y) {
+  // Remove any existing suggestion first
+  const existingSuggestion = document.querySelector('.building-suggestion');
+  if (existingSuggestion) {
+    existingSuggestion.remove();
+  }
+  
+  // Create building suggestion element
+  const suggestion = document.createElement('div');
+  suggestion.className = 'building-suggestion';
+  
+  // Position it near the center of the screen
+  const centerX = window.innerWidth / 2;
+  const centerY = window.innerHeight / 2;
+  suggestion.style.left = `${centerX - 150}px`; // 150 is half the width of the suggestion box
+  suggestion.style.top = `${centerY - 200}px`;  // Position it a bit above center
+  
+  // Get terrain type for filtering
+  const terrainType = tile.type;
+  
+  // Get player's current age
+  const currentPlayer = gameState.players[gameState.currentPlayer - 1];
+  const playerAge = currentPlayer.age;
+  
+  // Create content
+  suggestion.innerHTML = `
+    <div class="suggestion-header">
+      <h3>Build at (${x}, ${y}) - ${terrainType}</h3>
+      <button class="close-suggestion">×</button>
+    </div>
+    <div class="suggestion-content">
+      <p>Select a building type:</p>
+      <div class="suggestion-buttons"></div>
+    </div>
+  `;
+  
+  // Add to document
+  document.body.appendChild(suggestion);
+  
+  // Add event listener to close button
+  suggestion.querySelector('.close-suggestion').addEventListener('click', () => {
+    suggestion.remove();
+  });
+  
+  // Populate buttons with available buildings
+  const buttonContainer = suggestion.querySelector('.suggestion-buttons');
+  
+  // Filter buildings by terrain and age
+  for (const [buildingType, building] of Object.entries(buildingTypes)) {
+    // Skip buildings from future ages
+    if (building.age && gameState.ages.indexOf(building.age) > gameState.ages.indexOf(playerAge)) {
+      continue;
+    }
+    
+    // Skip buildings with terrain requirements that don't match
+    if (building.terrainRequirement && !building.terrainRequirement.includes(terrainType)) {
+      continue;
+    }
+    
+    // Create button
+    const button = document.createElement('button');
+    button.className = 'suggestion-building-btn';
+    button.textContent = buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    
+    // Add tooltip with cost
+    let tooltipText = '';
+    for (const resource in building.cost) {
+      tooltipText += `${resource}: ${building.cost[resource]}, `;
+    }
+    tooltipText = tooltipText.slice(0, -2); // Remove trailing comma
+    button.title = tooltipText;
+    
+    // Check if player can afford it
+    let canAfford = true;
+    for (const resource in building.cost) {
+      if ((currentPlayer.resources[resource] || 0) < building.cost[resource]) {
+        canAfford = false;
+        break;
+      }
+    }
+    
+    button.disabled = !canAfford;
+    
+    // Add click event
+    button.addEventListener('click', () => {
+      startBuilding(gameState, buildingType);
+      suggestion.remove();
+    });
+    
+    buttonContainer.appendChild(button);
+  }
+  
+  // If no buildings are available for this terrain, show a message
+  if (buttonContainer.children.length === 0) {
+    buttonContainer.innerHTML = `<p>No buildings available for ${terrainType} terrain in the ${playerAge}.</p>`;
+  }
+}
   
   // Hide unit action container when deselecting
   const unitActionsContainer = document.getElementById('unit-actions-container');
@@ -381,7 +556,9 @@ function handleCanvasClick(e) {
       
       if (validLocation) {
         // Attempt to move the unit to the clicked location
-        moveUnit(selectedUnit, gridX, gridY);
+      moveUnitSystem(selectedUnit, gridX, gridY, gameState.map, (message) => {
+        showNotification(message);
+      });
         
         // Update unit UI panel with new MP
         updateUnitActionsPanel(selectedUnit);
@@ -409,7 +586,7 @@ function handleCanvasClick(e) {
       }
     }
     
-    renderGame();
+    debouncedRender();
     return;
   }
   
@@ -429,7 +606,9 @@ function handleCanvasClick(e) {
     
     if (moveResult.canMove) {
       // Valid move - proceed with movement
-      moveUnit(selectedUnit, gridX, gridY);
+      moveUnitSystem(selectedUnit, gridX, gridY, gameState.map, (message) => {
+        showNotification(message);
+      });
       selectedUnit = null;
       gameState.selectedUnit = null;
       
@@ -441,7 +620,7 @@ function handleCanvasClick(e) {
     }
   }
   
-  renderGame();
+  debouncedRender();
 }
 
 // Handle unit attacks

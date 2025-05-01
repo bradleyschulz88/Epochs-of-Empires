@@ -8,12 +8,33 @@
   <link rel="stylesheet" href="css/building-suggestion.css">
   <link rel="stylesheet" href="css/start-menu.css">
   <link rel="stylesheet" href="css/actions-tab-fix.css">
+  <link rel="stylesheet" href="css/enhanced-ui.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error('Error: ' + msg + '\nURL: ' + url + '\nLine: ' + lineNo + '\nColumn: ' + columnNo + '\nError object: ' + JSON.stringify(error));
+      alert('Failed to load game: ' + msg);
+      return false;
+    };
+  </script>
 </head>
 <body>
   <div id="gameContainer" style="display: none;">
     <div id="canvasContainer">
       <canvas id="gameCanvas" width="800" height="600"></canvas>
-      <canvas id="minimap" width="150" height="150"></canvas>
+      <canvas id="minimap" width="180" height="180"></canvas>
+      
+      <!-- Zoom controls -->
+      <div class="zoom-controls">
+        <button class="zoom-button" id="zoomIn" aria-label="Zoom in">+</button>
+        <div class="zoom-level" id="zoomLevel">100%</div>
+        <button class="zoom-button" id="zoomOut" aria-label="Zoom out">−</button>
+      </div>
+      
+      <!-- Dark mode toggle (optional feature) -->
+      <button class="dark-mode-toggle" id="darkModeToggle" aria-label="Toggle dark mode">
+        ☾
+      </button>
     </div>
     <div id="ui">
       <h2>Player <span id="currentPlayer">1</span> - <span id="currentAge">Stone Age</span></h2>

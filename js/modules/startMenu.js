@@ -16,14 +16,56 @@ export function startNewGame(gameState, settings) {
         }
 
         // Create backup of current state
-        const previousState = JSON.parse(JSON.stringify(gameState));
+        let previousState;
+        try {
+            previousState = JSON.parse(JSON.stringify(gameState));
+        } catch (e) {
+            console.warn("Failed to clone game state:", e);
+            // If we can't clone, just create a fresh initial state
+            previousState = createInitialGameState();
+        }
         
         try {
+            // Ensure we have a valid game state to work with
+            if (!gameState) {
+                console.warn("No gameState provided, creating new initial state");
+                gameState = createInitialGameState();
+            }
+            
             // Validate initial game state
             const initialValidation = validateGameState(gameState);
             if (!initialValidation.isValid) {
                 console.error('Initial game state validation failed:', initialValidation.errors);
                 gameState = createInitialGameState(); // Reset to fresh state
+            }
+
+            // Initialize players array if it doesn't exist
+            if (!gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0) {
+                console.warn("Players array missing, initializing default players");
+                gameState.players = [
+                    {
+                        index: 1,
+                        name: "Player 1",
+                        type: "human",
+                        age: gameState.ages[0] || 'Stone Age',
+                        resources: {
+                            food: 100,
+                            wood: 100,
+                            stone: 50,
+                            gold: 0
+                        },
+                        technologies: [],
+                        units: [],
+                        buildings: [],
+                        buildingQueue: [],
+                        unlockedUnits: ["settler", "warrior"],
+                        happiness: 100,
+                        health: 100,
+                        totalPopulation: 5,
+                        populationCap: 10,
+                        ageProgress: 0
+                    }
+                ];
             }
 
             // Apply settings to gameState
@@ -41,6 +83,39 @@ export function startNewGame(gameState, settings) {
             if (settings.playerCountry && gameState.players && gameState.players.length > 0) {
                 gameState.players[0].faction = settings.playerCountry.name;
                 gameState.players[0].name = `Player (${settings.playerCountry.flag} ${settings.playerCountry.name})`;
+            }
+            
+            // Make sure there are enough AI players based on settings
+            if (gameState.aiPlayerCount > 0 && gameState.players.length < gameState.aiPlayerCount + 1) {
+                // Add AI players if needed
+                const aiToCreate = gameState.aiPlayerCount - (gameState.players.length - 1);
+                console.log(`Creating ${aiToCreate} new AI players`);
+                
+                for (let i = 0; i < aiToCreate; i++) {
+                    const aiIndex = gameState.players.length + 1;
+                    gameState.players.push({
+                        index: aiIndex,
+                        name: `AI Player ${aiIndex}`,
+                        type: "ai",
+                        age: gameState.ages[0] || 'Stone Age',
+                        resources: {
+                            food: 100,
+                            wood: 100,
+                            stone: 50,
+                            gold: 0
+                        },
+                        technologies: [],
+                        units: [],
+                        buildings: [],
+                        buildingQueue: [],
+                        unlockedUnits: ["settler", "warrior"],
+                        happiness: 100,
+                        health: 100,
+                        totalPopulation: 5,
+                        populationCap: 10,
+                        ageProgress: 0
+                    });
+                }
             }
             
             // Set AI players active/inactive
@@ -62,16 +137,37 @@ export function startNewGame(gameState, settings) {
                 }
             } catch (mapError) {
                 console.error('Map generation failed:', mapError);
+                
                 // Clean up the game state
                 gameState = cleanGameState(gameState);
-                // Restore previous state and try again with different seed
-                if (!settings.mapSeed) {
-                    settings.mapSeed = Math.floor(Math.random() * 1000000);
-                    console.log('Retrying map generation with new seed:', settings.mapSeed);
-                    gameState = generateMap(gameState);
-                } else {
-                    throw new Error('Failed to generate map with provided seed');
+                
+                // Retry map generation with different seed
+                try {
+                    if (!settings.mapSeed) {
+                        settings.mapSeed = Math.floor(Math.random() * 1000000);
+                        console.log('Retrying map generation with new seed:', settings.mapSeed);
+                        gameState = generateMap(gameState);
+                    } else {
+                        throw new Error('Failed to generate map with provided seed');
+                    }
+                } catch (retryError) {
+                    console.error("Failed on retry:", retryError);
+                    // Create a basic fallback map - just a simple grid with varied terrain
+                    createFallbackMap(gameState);
                 }
+            }
+            
+            // Make sure game state has required methods
+            if (!gameState.checkGameEnd || typeof gameState.checkGameEnd !== 'function') {
+                gameState.checkGameEnd = function() {
+                    return { ended: false, winner: null, type: null };
+                };
+            }
+            
+            if (!gameState.notifyPlayers || typeof gameState.notifyPlayers !== 'function') {
+                gameState.notifyPlayers = function(notification) {
+                    console.log("Game notification:", notification);
+                };
             }
             
             // Hide start menu
@@ -96,8 +192,174 @@ export function startNewGame(gameState, settings) {
     } catch (error) {
         console.error('Critical error in startNewGame:', error);
         alert('Failed to start new game. Please try again with different settings.');
-        return gameState;
+        return gameState || createInitialGameState(); // Return valid state no matter what
     }
+}
+
+// Create a simple fallback map as a last resort
+function createFallbackMap(gameState) {
+    console.warn("Creating fallback map");
+    
+    const size = gameState.mapSize || 30;
+    const map = [];
+
+    // Initialize empty map
+    for (let y = 0; y < size; y++) {
+        map[y] = [];
+        for (let x = 0; x < size; x++) {
+            // Simple pattern: water at edges, plains in center, forests and mountains scattered
+            let terrainType = 'plains';
+            
+            // Water at edges
+            if (x < 3 || x >= size - 3 || y < 3 || y >= size - 3) {
+                terrainType = 'water';
+            }
+            
+            // Some forests - in diagonal patterns
+            if ((x + y) % 7 === 0 && terrainType === 'plains') {
+                terrainType = 'forest';
+            }
+            
+            // Some mountains - in circular patterns
+            const distToCenter = Math.sqrt(Math.pow(x - size/2, 2) + Math.pow(y - size/2, 2));
+            if (distToCenter > size/4 && distToCenter < size/3 && (x * y) % 11 === 0 && terrainType === 'plains') {
+                terrainType = 'mountain';
+            }
+            
+            // Hills in between mountains and plains
+            if (distToCenter > size/3.5 && distToCenter < size/2.5 && (x * y) % 13 === 0 && terrainType === 'plains') {
+                terrainType = 'hills';
+            }
+            
+            map[y][x] = {
+                x: x,
+                y: y,
+                q: x,
+                r: y,
+                type: terrainType,
+                discovered: Array(gameState.players.length).fill(false),
+                resourceType: null,
+                resourceAmount: 0,
+                unit: null,
+                building: null,
+                buildingInProgress: null
+            };
+        }
+    }
+    
+    // Set initial discovered tiles for players and place starting units
+    for (let i = 0; i < gameState.players.length; i++) {
+        // Place player starts in different areas
+        let startX, startY;
+        
+        switch (i % 4) {
+            case 0: // Top left quadrant
+                startX = Math.floor(size * 0.2 + Math.random() * size * 0.2);
+                startY = Math.floor(size * 0.2 + Math.random() * size * 0.2);
+                break;
+            case 1: // Top right quadrant
+                startX = Math.floor(size * 0.6 + Math.random() * size * 0.2);
+                startY = Math.floor(size * 0.2 + Math.random() * size * 0.2);
+                break;
+            case 2: // Bottom left quadrant
+                startX = Math.floor(size * 0.2 + Math.random() * size * 0.2);
+                startY = Math.floor(size * 0.6 + Math.random() * size * 0.2);
+                break;
+            case 3: // Bottom right quadrant
+                startX = Math.floor(size * 0.6 + Math.random() * size * 0.2);
+                startY = Math.floor(size * 0.6 + Math.random() * size * 0.2);
+                break;
+        }
+        
+        // Make sure this isn't water
+        if (map[startY][startX].type === 'water') {
+            map[startY][startX].type = 'plains';
+        }
+        
+        // Place starter units
+        // Settler in starting position
+        map[startY][startX].unit = {
+            type: 'settler',
+            owner: i + 1,
+            x: startX,
+            y: startY,
+            q: startX,
+            r: startY,
+            health: 100,
+            remainingMP: 2,
+            canMove: true
+        };
+        
+        // Warrior in adjacent tile if possible
+        const adjacentX = Math.min(size - 1, startX + 1);
+        const adjacentY = startY;
+        
+        // Don't place warrior in water
+        if (map[adjacentY][adjacentX].type === 'water') {
+            map[adjacentY][adjacentX].type = 'plains';
+        }
+        
+        map[adjacentY][adjacentX].unit = {
+            type: 'warrior',
+            owner: i + 1,
+            x: adjacentX,
+            y: adjacentY,
+            q: adjacentX,
+            r: adjacentY,
+            health: 100,
+            remainingMP: 2,
+            canMove: true
+        };
+        
+        // Reveal area around starting position
+        const startingVision = 2;
+        for (let dy = -startingVision; dy <= startingVision; dy++) {
+            for (let dx = -startingVision; dx <= startingVision; dx++) {
+                const y = startY + dy;
+                const x = startX + dx;
+                if (x >= 0 && x < size && y >= 0 && y < size) {
+                    // Simple radius check
+                    if (Math.sqrt(dx*dx + dy*dy) <= startingVision) {
+                        map[y][x].discovered[i] = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add some random resources
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            // 10% chance of resource
+            if (Math.random() < 0.1) {
+                let possibleResources = [];
+                
+                switch (map[y][x].type) {
+                    case 'plains':
+                        possibleResources = ['food', 'horses'];
+                        break;
+                    case 'forest':
+                        possibleResources = ['wood', 'food', 'fur'];
+                        break;
+                    case 'hills':
+                    case 'mountain':
+                        possibleResources = ['stone', 'iron', 'gold'];
+                        break;
+                    case 'water':
+                        possibleResources = ['fish'];
+                        break;
+                }
+                
+                if (possibleResources.length > 0) {
+                    const resource = possibleResources[Math.floor(Math.random() * possibleResources.length)];
+                    map[y][x].resourceType = resource;
+                    map[y][x].resourceAmount = 10 + Math.floor(Math.random() * 20);
+                }
+            }
+        }
+    }
+    
+    gameState.map = map;
 }
 
 /**
@@ -148,6 +410,17 @@ function createStartMenuUI() {
     const overlay = document.createElement('div');
     overlay.id = 'startMenuOverlay';
     overlay.className = 'start-menu-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
     
     overlay.innerHTML = `
         <div class="start-menu-container">
@@ -269,6 +542,7 @@ function createStartMenuUI() {
     `;
     
     document.body.appendChild(overlay);
+    console.log('Start menu overlay created and appended to body');
 }
 
 /**

@@ -15,11 +15,32 @@ export const resourceIcons = {
     copper: '🟫',
     iron: '⚙️',
     gold: '💰',
-    coal: '⬛'
+    coal: '⬛',
+    horses: '🐎',
+    fish: '🐟',
+    fur: '🦊'
 };
 
 // Resource tile types and their properties
 export const resourceTileTypes = {
+    horses: {
+        name: "Horses",
+        validTerrain: ['plains'],
+        baseAmount: 100,
+        respawnRate: 2
+    },
+    fish: {
+        name: "Fish",
+        validTerrain: ['water'],
+        baseAmount: 150,
+        respawnRate: 7
+    },
+    fur: {
+        name: "Fur",
+        validTerrain: ['forest'],
+        baseAmount: 100,
+        respawnRate: 2
+    },
     food: {
         name: "Food",
         validTerrain: ['plains'],

@@ -1,6 +1,53 @@
 // Error handling and validation module
 
 /**
+ * ErrorHandler class for managing game errors and validation
+ */
+export class ErrorHandler {
+    constructor(gameState) {
+        this.gameState = gameState;
+        this.errors = [];
+    }
+    
+    /**
+     * Validate the current game state
+     * @returns {boolean} Whether the state is valid
+     */
+    validateState() {
+        const result = validateGameState(this.gameState);
+        this.errors = result.errors;
+        return result.isValid;
+    }
+    
+    /**
+     * Handle an error with context
+     * @param {string} context - Error context
+     * @param {Error} error - Error object
+     */
+    handleError(context, error) {
+        handleError(context, error);
+        this.errors.push({ context, error: error.message });
+    }
+    
+    /**
+     * Attempt to recover from errors in the game state
+     */
+    attemptRecovery() {
+        this.gameState = cleanGameState(this.gameState);
+        this.errors = [];
+    }
+    
+    /**
+     * Get list of errors
+     * @returns {Array} List of errors
+     */
+    getErrors() {
+        return this.errors;
+    }
+}
+
+
+/**
  * Validate the game state structure and data
  * @param {Object} gameState - The game state to validate
  * @returns {Object} - Validation result with isValid flag and errors array

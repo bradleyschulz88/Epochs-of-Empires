@@ -1,4 +1,11 @@
 export const terrainTypes = {
+    hills: {
+        name: "Hills",
+        color: "#996633",
+        movementCost: 2,
+        defenseBonus: 30,
+        description: "Rolling hills with strategic advantages"
+    },
     plains: {
         name: "Plains",
         color: "#90EE90",

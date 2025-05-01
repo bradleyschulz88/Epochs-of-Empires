@@ -1,0 +1,276 @@
+:root {
+  --tile-size: 50px;
+  --gutter: 3px;
+  --map-bg: #1F1F1F;
+  --ui-bg: #F9F9F9;
+  --accent-wood: #4CAF50;
+  --accent-stone: #FFC107;
+  --accent-water: #2196F3;
+  --card-radius: 8px;
+  --card-padding: 16px;
+  --btn-radius: 8px;
+  --btn-height: 40px;
+  --text-primary: #333;
+  --text-secondary: #555;
+  --sidebar-width: 330px;
+}
+
+/* Main layout adjustments */
+#gameContainer {
+  display: grid;
+  grid-template-columns: 1fr var(--sidebar-width);
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#canvasContainer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--map-bg);
+}
+
+#ui {
+  width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+  padding: 16px;
+  background: white;
+  box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Zoom controls */
+.zoom-controls {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zoom-button {
+  width: 40px;
+  height: 40px;
+  background: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.zoom-button:hover {
+  background: #e0e0e0;
+}
+
+.zoom-level {
+  color: white;
+  text-align: center;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+/* Mini-map enhancements */
+#minimap {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  width: 180px;
+  height: 180px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Card styling for sidebar */
+.card {
+  background: var(--ui-bg);
+  border-radius: var(--card-radius);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: var(--card-padding);
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card h2, .card h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card p, .card small {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Button enhancements */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--btn-height);
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: var(--btn-radius);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0 16px;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary { background: #2196F3; }
+.btn-secondary { background: #4CAF50; }
+.btn-warning { background: #FFC107; color: #333; }
+
+/* Quick-build list */
+.quick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-list .btn {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-list .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.quick-list .btn .icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 1000;
+}
+
+.tooltip.show {
+  opacity: 1;
+}
+
+/* Resource coloring */
+.resource-food { color: var(--accent-wood); }
+.resource-wood { color: var(--accent-wood); }
+.resource-stone { color: var(--accent-stone); }
+.resource-water { color: var(--accent-water); }
+
+/* Make typography consistent */
+body {
+  font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  color: var(--text-primary);
+}
+
+/* Dark mode toggle */
+.dark-mode-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 20px;
+  z-index: 100;
+}
+
+.dark-mode .card {
+  background: #2A2A2A;
+  color: #EEE;
+}
+
+.dark-mode .card h2, 
+.dark-mode .card h3, 
+.dark-mode .card p {
+  color: #EEE;
+}
+
+/* Media query for responsive layout */
+@media (max-width: 800px) {
+  #gameContainer {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  
+  #ui {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 40vh;
+    max-height: 40vh;
+    z-index: 200;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease;
+    transform: translateY(calc(100% - 40px));
+  }
+  
+  #ui.expanded {
+    transform: translateY(0);
+  }
+  
+  .ui-handle {
+    height: 4px;
+    width: 50px;
+    background: #ccc;
+    border-radius: 2px;
+    margin: 0 auto 10px;
+    cursor: grab;
+  }
+}

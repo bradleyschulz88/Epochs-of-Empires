@@ -1,3 +1,107 @@
+// Import needed modules
+import { unitTypes } from './units.js';
+import { buildingTypes } from './buildings.js';
+
+// Export individual functions to match the imports in game.js
+export function endTurn(gameState) {
+    // End the current turn
+    const currentPlayer = gameState.currentPlayer;
+    gameState.currentPlayer = (currentPlayer % gameState.players.length) + 1;
+    gameState.turn++;
+    
+    // Process end of turn effects
+    processProductionQueues(gameState);
+    
+    return gameState;
+}
+
+export function startResearch(techName) {
+    // Start researching a technology
+    const player = gameState.players[gameState.currentPlayer - 1];
+    player.currentResearch = techName;
+    player.researchProgress = 0;
+    
+    return gameState;
+}
+
+export function advanceToNextAge(gameState) {
+    const player = gameState.players[gameState.currentPlayer - 1];
+    const currentAgeIndex = gameState.ages.indexOf(player.age);
+    
+    if (currentAgeIndex < gameState.ages.length - 1 && player.ageProgress >= 100) {
+        player.age = gameState.ages[currentAgeIndex + 1];
+        player.ageProgress = 0;
+    }
+    
+    return gameState;
+}
+
+export function toggleFogOfWar(gameState) {
+    gameState.fogOfWarEnabled = !gameState.fogOfWarEnabled;
+    return gameState;
+}
+
+export function setAIDifficulty(gameState, difficulty) {
+    gameState.aiDifficulty = difficulty;
+    return gameState;
+}
+
+export function handleDiplomacy(gameState, targetPlayer, action) {
+    // Handle diplomatic actions between players
+    return gameState;
+}
+
+export function createUnit(gameState, unitType) {
+    // Create a new unit of the specified type
+    const player = gameState.players[gameState.currentPlayer - 1];
+    
+    // Check if player can afford it
+    const unitInfo = unitTypes[unitType];
+    if (!unitInfo) return gameState;
+    
+    // Deduct resources
+    for (const resource in unitInfo.cost) {
+        player.resources[resource] -= unitInfo.cost[resource];
+    }
+    
+    // Add unit to player's units
+    // In a real implementation, would need to place on map
+    
+    return gameState;
+}
+
+export function startBuilding(gameState, buildingType) {
+    gameState.selectedBuildingType = buildingType;
+    return gameState;
+}
+
+export function buildStructure(gameState, x, y) {
+    if (!gameState.selectedBuildingType) return gameState;
+    
+    const player = gameState.players[gameState.currentPlayer - 1];
+    const buildingInfo = buildingTypes[gameState.selectedBuildingType];
+    
+    // Check if can afford
+    for (const resource in buildingInfo.cost) {
+        player.resources[resource] -= buildingInfo.cost[resource];
+    }
+    
+    // Add building in progress
+    gameState.map[y][x].buildingInProgress = gameState.selectedBuildingType;
+    gameState.map[y][x].buildingProgress = 0;
+    gameState.map[y][x].buildingOwner = gameState.currentPlayer;
+    
+    // Clear selection
+    gameState.selectedBuildingType = null;
+    
+    return gameState;
+}
+
+export function processProductionQueues(gameState) {
+    // Process building and unit production queues
+    return gameState;
+}
+
 export class GameEvents {
     constructor(gameState) {
         this.gameState = gameState;

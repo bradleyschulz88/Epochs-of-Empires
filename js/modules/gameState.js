@@ -1,7 +1,7 @@
 import { defaultSettings, ages } from './constants.js';
 
 export function createInitialGameState() {
-    return {
+    const state = {
         mapSize: defaultSettings.mapSize,
         mapType: defaultSettings.mapType,
         resourceDensity: defaultSettings.resourceDensity,
@@ -36,6 +36,28 @@ export function createInitialGameState() {
                 ageProgress: 0
             }
         ],
-        map: null
+        map: null,
+        
+        // Check game end conditions
+        checkGameEnd: function() {
+            const result = {
+                ended: false,
+                winner: null,
+                type: null
+            };
+            
+            // No victory conditions in starter game
+            // But we'll implement a placeholder for future expansion
+            
+            return result;
+        },
+        
+        // Notify players about events
+        notifyPlayers: function(notification) {
+            // This is a placeholder for future event notification
+            console.log("Game notification:", notification);
+        }
     };
+    
+    return state;
 }

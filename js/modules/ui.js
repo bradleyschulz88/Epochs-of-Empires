@@ -1,130 +1,111 @@
-import { resourceIcons, resourcesByAge, resourceTileTypes, getSimpleResourcesByAge } from './resources.js';
+import { resourceIcons, resourcesByAge, getSimpleResourcesByAge } from './resources.js';
 import { terrainTypes } from './terrain.js';
 import { unitTypes } from './units.js';
 import { technologies } from './technologies.js';
-import { buildingTypes, buildingCategories, resourceExtractors } from './buildings.js';
+import { buildingTypes } from './buildings.js';
 import { revealArea } from './map.js';
 
-// Constants for hexagon drawing
-const HEX_SIZE = 30; // Size of hexagon (distance from center to corner)
+// Constants for tile drawing
+const TILE_SIZE = 50; // Increased from 40 to 50px as requested
+const TILE_GUTTER = 3; // Added 3px gutter between tiles
+const HIGHLIGHT_BORDER_WIDTH = 3; // For tile highlighting
+const ICON_SIZE = 32; // Standardized icon size
 
-/**
- * Draw a hexagon at the specified position
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {Number} x - Center X coordinate
- * @param {Number} y - Center Y coordinate
- * @param {Number} size - Hex size (distance from center to corner)
- * @param {String} fillColor - Color to fill the hexagon
- */
-function drawHexagon(ctx, x, y, size, fillColor) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const angle = 2 * Math.PI / 6 * i;
-    const pointX = x + size * Math.cos(angle);
-    const pointY = y + size * Math.sin(angle);
-    if (i === 0) {
-      ctx.moveTo(pointX, pointY);
-    } else {
-      ctx.lineTo(pointX, pointY);
+// Rendering metrics
+let renderedFrameCount = 0;
+let lastFpsUpdateTime = 0;
+let fps = 0;
+
+// Calculate optimal map size based on screen dimensions
+export function calculateOptimalMapSize(canvas) {
+  const horizontalTiles = Math.floor(canvas.width / TILE_SIZE) - 2;
+  const verticalTiles = Math.floor(canvas.height / TILE_SIZE) - 2;
+  return Math.min(horizontalTiles, verticalTiles);
+}
+
+// Get recommended map size based on screen resolution
+export function getRecommendedMapSize() {
+  const screenWidth = window.innerWidth;
+  const screenHeight = window.innerHeight;
+  
+  const estimatedCanvasWidth = screenWidth * 0.8;
+  const estimatedCanvasHeight = screenHeight * 0.7;
+  
+  const horizontalTiles = Math.floor(estimatedCanvasWidth / TILE_SIZE) - 2;
+  const verticalTiles = Math.floor(estimatedCanvasHeight / TILE_SIZE) - 2;
+  
+  const optimalSize = Math.min(horizontalTiles, verticalTiles);
+  
+  if (optimalSize <= 10) return 10;
+  if (optimalSize <= 15) return 15;
+  if (optimalSize <= 20) return 20;
+  if (optimalSize <= 30) return 30;
+  if (optimalSize <= 40) return 40;
+  return 50;
+}
+
+// Coordinate conversion
+export function gridToPixel(x, y) {
+  // Account for gutter in positioning
+  return { x: x * (TILE_SIZE + TILE_GUTTER), y: y * (TILE_SIZE + TILE_GUTTER) };
+}
+
+export function pixelToGrid(pixelX, pixelY) {
+  // Account for gutter in conversion
+  return { 
+    x: Math.floor(pixelX / (TILE_SIZE + TILE_GUTTER)), 
+    y: Math.floor(pixelY / (TILE_SIZE + TILE_GUTTER)) 
+  };
+}
+
+// Show map size recommendation
+export function showMapSizeRecommendation() {
+  const recommendedSize = getRecommendedMapSize();
+  showNotification(`Recommended map size for your screen: ${recommendedSize}x${recommendedSize}`, 'info');
+  return recommendedSize;
+}
+
+// Empty compatibility function (no hex grid anymore)
+export function clearHexPathCache() {}
+
+// Water pattern for water tiles
+function createWaterPattern(ctx) {
+  const patternCanvas = document.createElement('canvas');
+  const patternContext = patternCanvas.getContext('2d');
+  
+  patternCanvas.width = 20;
+  patternCanvas.height = 20;
+  
+  patternContext.fillStyle = '#4169E1';
+  patternContext.fillRect(0, 0, 20, 20);
+  
+  patternContext.strokeStyle = '#5e7ce1';
+  patternContext.lineWidth = 1;
+  
+  patternContext.beginPath();
+  for (let y = 0; y < 20; y += 5) {
+    patternContext.moveTo(0, y);
+    for (let x = 0; x < 20; x += 5) {
+      patternContext.quadraticCurveTo(x + 2.5, y + 2, x + 5, y);
     }
   }
-  ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-}
-
-/**
- * Draw a hexagon outline at the specified position
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {Number} x - Center X coordinate
- * @param {Number} y - Center Y coordinate
- * @param {Number} size - Hex size (distance from center to corner)
- */
-function drawHexagonOutline(ctx, x, y, size) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const angle = 2 * Math.PI / 6 * i;
-    const pointX = x + size * Math.cos(angle);
-    const pointY = y + size * Math.sin(angle);
-    if (i === 0) {
-      ctx.moveTo(pointX, pointY);
-    } else {
-      ctx.lineTo(pointX, pointY);
-    }
-  }
-  ctx.closePath();
-  ctx.stroke();
-}
-
-/**
- * Convert axial coordinates (q,r) to pixel coordinates (x,y)
- * @param {Number} q - Q axial coordinate
- * @param {Number} r - R axial coordinate
- * @param {Number} size - Size of hex (distance from center to corner)
- * @returns {Object} - {x, y} pixel coordinates
- */
-function axialToPixel(q, r, size = HEX_SIZE) {
-  const x = size * Math.sqrt(3) * (q + r/2);
-  const y = size * 3/2 * r;
-  return {x, y};
-}
-
-/**
- * Convert pixel coordinates (x,y) to axial coordinates (q,r)
- * @param {Number} x - X pixel coordinate
- * @param {Number} y - Y pixel coordinate
- * @param {Number} size - Size of hex (distance from center to corner)
- * @returns {Object} - {q, r} axial coordinates (rounded to nearest hex)
- */
-function pixelToAxial(x, y, size = HEX_SIZE) {
-  const q_float = (x * Math.sqrt(3)/3 - y/3) / size;
-  const r_float = y * 2/3 / size;
-  return roundToHex(q_float, r_float);
-}
-
-/**
- * Helper function to round floating point axial coordinates to the nearest hex
- * @param {Number} q - Q axial coordinate (floating point)
- * @param {Number} r - R axial coordinate (floating point)
- * @returns {Object} - {q, r} axial coordinates (rounded integers)
- */
-function roundToHex(q, r) {
-  // Convert to cube coordinates for rounding
-  let x = q;
-  let z = r;
-  let y = -x - z;
+  patternContext.stroke();
   
-  // Round cube coordinates
-  let rx = Math.round(x);
-  let ry = Math.round(y);
-  let rz = Math.round(z);
-  
-  // Fix rounding errors
-  const x_diff = Math.abs(rx - x);
-  const y_diff = Math.abs(ry - y);
-  const z_diff = Math.abs(rz - z);
-  
-  if (x_diff > y_diff && x_diff > z_diff) {
-    rx = -ry - rz;
-  } else if (y_diff > z_diff) {
-    ry = -rx - rz;
-  } else {
-    rz = -rx - ry;
-  }
-  
-  // Convert back to axial coordinates
-  return {q: rx, r: rz};
+  return ctx.createPattern(patternCanvas, 'repeat');
 }
 
-// Update the resource display
+// Resource display
 export function updateResourceDisplay(gameState) {
+  if (!gameState || !gameState.players) return;
+  
   const container = document.getElementById('resourceContainer');
+  if (!container) return;
+  
   container.innerHTML = '';
   
   const currentPlayer = gameState.players[gameState.currentPlayer - 1];
   const availableResources = getSimpleResourcesByAge(currentPlayer.age);
   
-  // Create all possible resources, but only show available ones
   for (const resourceType in resourceIcons) {
     const isAvailable = availableResources.includes(resourceType);
     const amount = currentPlayer.resources[resourceType] || 0;
@@ -139,142 +120,159 @@ export function updateResourceDisplay(gameState) {
       <div>${resourceType.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</div>
     `;
     
-    resourceElement.title = resourceIcons[resourceType];
+    resourceElement.title = resourceType;
     
-    // Add click event to filter buildings for this resource type
     if (isAvailable) {
       resourceElement.style.cursor = 'pointer';
       resourceElement.addEventListener('click', () => {
-        showBuildingsByResourceType(gameState, resourceType);
+        updateBuildingButtons(gameState);
       });
     }
     
     container.appendChild(resourceElement);
   }
   
-  // Update population display
   updatePopulationDisplay(gameState);
 }
 
-// Function to show buildings available for a specific resource type
-function showBuildingsByResourceType(gameState, resourceType) {
+// Population display
+export function updatePopulationDisplay(gameState) {
+  if (!gameState || !gameState.players) return;
+  
+  const player = gameState.players[gameState.currentPlayer - 1];
+  
+  const popCount = document.getElementById('populationCount');
+  const popCap = document.getElementById('populationCap');
+  
+  if (popCount) popCount.textContent = Math.floor(player.totalPopulation || 0);
+  if (popCap) popCap.textContent = player.populationCap || 0;
+  
+  const popContainer = document.querySelector('.population-container');
+  if (popContainer) {
+    if (player.totalPopulation >= player.populationCap) {
+      popContainer.classList.add('overpopulated');
+    } else {
+      popContainer.classList.remove('overpopulated');
+    }
+  }
+}
+
+// Building menu
+export function updateBuildingButtons(gameState, startBuilding) {
   const buildingButtons = document.querySelector('.building-buttons');
+  if (!buildingButtons) return;
+
   buildingButtons.innerHTML = '';
   
   const player = gameState.players[gameState.currentPlayer - 1];
-  const playerAge = player.age;
   
-  console.log(`Filtering buildings for resource: ${resourceType} in age: ${playerAge}`);
-  
-  // Get the building types that can extract this resource
-  const extractorTypes = resourceExtractors[resourceType] || [];
-  
-  if (extractorTypes.length === 0) {
-    const message = document.createElement('div');
-    message.className = 'no-buildings-message';
-    message.textContent = `No buildings available to produce ${resourceType}`;
-    buildingButtons.appendChild(message);
-    return;
-  }
-  
-  let buildingCount = 0;
-  
-  // Only show buildings that are extractors for this resource type and available in current age
-  for (const buildingType of extractorTypes) {
-    const building = buildingTypes[buildingType];
-    
+  for (const [buildingType, building] of Object.entries(buildingTypes)) {
     // Skip buildings from future ages
-    if (building.age && gameState.ages.indexOf(building.age) > gameState.ages.indexOf(playerAge)) {
+    if (building.age && gameState.ages.indexOf(building.age) > gameState.ages.indexOf(player.age)) {
       continue;
     }
-    
-    buildingCount++;
     
     // Format cost text
     let costText = '';
     for (const resource in building.cost) {
-      costText += `${building.cost[resource]} ${resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}, `;
+      costText += `${building.cost[resource]} ${resource}, `;
     }
-    costText = costText.slice(0, -2); // Remove trailing comma
+    costText = costText.slice(0, -2);
     
     // Create button
     const button = document.createElement('button');
-    button.textContent = `${buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (${costText})`;
-    button.onclick = () => window.startBuilding(buildingType);
+    button.textContent = `${buildingType.replace(/_/g, ' ')} (${costText})`;
+    
+    // Set onClick handler
+    button.onclick = () => {
+      if (typeof startBuilding === 'function') {
+        startBuilding(buildingType);
+      } else if (window.startBuilding) {
+        window.startBuilding(buildingType);
+      }
+    };
     
     // Check if player can afford it
     let canAfford = true;
-    let missingResources = [];
-    
     for (const resource in building.cost) {
-      const required = building.cost[resource];
-      const available = player.resources[resource] || 0;
-      
-      if (available < required) {
+      if ((player.resources[resource] || 0) < building.cost[resource]) {
         canAfford = false;
-        missingResources.push(`${resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}: ${available}/${required}`);
+        break;
       }
     }
     
     button.disabled = !canAfford;
-    
-    // Add tooltip for disabled buttons
-    if (!canAfford) {
-      button.title = `Insufficient resources:\n${missingResources.join('\n')}`;
-    } else {
-      button.title = building.description || `Build a ${buildingType.replace(/_/g, ' ')}`;
-    }
-    
     buildingButtons.appendChild(button);
   }
-  
-  // Display a message if no buildings are available for this resource
-  if (buildingCount === 0) {
-    const message = document.createElement('div');
-    message.className = 'no-buildings-message';
-    message.textContent = `No buildings available to produce ${resourceType} in the ${playerAge}`;
-    buildingButtons.appendChild(message);
-  }
-  
-  // Add a "Show All Buildings" link
-  const showAllLink = document.createElement('div');
-  showAllLink.className = 'show-all-buildings';
-  showAllLink.textContent = 'Show All Buildings';
-  showAllLink.style.cursor = 'pointer';
-  showAllLink.style.marginTop = '10px';
-  showAllLink.style.textAlign = 'center';
-  showAllLink.style.textDecoration = 'underline';
-  showAllLink.addEventListener('click', () => {
-    updateBuildingButtons(gameState, window.startBuilding);
-  });
-  buildingButtons.appendChild(showAllLink);
 }
 
-// Update the population display
-export function updatePopulationDisplay(gameState) {
+// Research buttons
+export function updateResearchButtons(gameState, startResearch) {
+  const researchButtons = document.getElementById('researchButtons');
+  if (!researchButtons) return;
+  
+  researchButtons.innerHTML = '';
+  
+  const player = gameState.players[gameState.currentPlayer - 1];
+  const ageTechnologies = technologies[player.age];
+  
+  if (!ageTechnologies) return;
+  
+  for (const techName in ageTechnologies) {
+    const tech = ageTechnologies[techName];
+    
+    // Skip if already researched
+    if (player.technologies && player.technologies.includes(techName)) continue;
+    
+    // Create button
+    const button = document.createElement('button');
+    button.textContent = `${techName} (${tech.cost} Tech Points)`;
+    button.onclick = () => startResearch(techName);
+    
+    // If researching, show progress
+    if (player.currentResearch === techName) {
+      button.textContent += ` - Researching (${Math.floor(player.researchProgress)}%)`;
+      button.disabled = true;
+    }
+    
+    researchButtons.appendChild(button);
+  }
+}
+
+// Unit buttons
+export function updateUnitButtons(gameState, createUnit) {
+  const unitButtonsContainer = document.getElementById('unitButtons');
+  if (!unitButtonsContainer) return;
+  
+  unitButtonsContainer.innerHTML = '';
+  
   const player = gameState.players[gameState.currentPlayer - 1];
   
-  // Update population counts
-  document.getElementById('populationCount').textContent = Math.floor(player.totalPopulation);
-  document.getElementById('populationCap').textContent = player.populationCap;
+  if (!player.unlockedUnits) return;
   
-  // Update happiness and health
-  document.getElementById('happinessLevel').textContent = player.happiness;
-  document.getElementById('healthLevel').textContent = player.health;
-  
-  // Visual indicator for overpopulation
-  const popContainer = document.querySelector('.population-container');
-  if (player.totalPopulation >= player.populationCap) {
-    popContainer.classList.add('overpopulated');
-  } else {
-    popContainer.classList.remove('overpopulated');
-  }
+  player.unlockedUnits.forEach(unitType => {
+    const unit = unitTypes[unitType];
+    if (!unit) return;
+    
+    const button = document.createElement('button');
+    button.textContent = unitType;
+    button.onclick = () => createUnit(unitType);
+    
+    unitButtonsContainer.appendChild(button);
+  });
 }
 
-// Update the upkeep display
+// Update upkeep
 export function updateUpkeepDisplay(gameState) {
   const upkeepList = document.getElementById('upkeepList');
+  if (!upkeepList) return;
+  
   const player = gameState.players[gameState.currentPlayer - 1];
+  
+  if (!player.upkeep) {
+    upkeepList.innerHTML = 'None';
+    return;
+  }
   
   let upkeepText = '';
   let hasUpkeep = false;
@@ -282,810 +280,525 @@ export function updateUpkeepDisplay(gameState) {
   for (const resource in player.upkeep) {
     if (player.upkeep[resource] > 0) {
       hasUpkeep = true;
-      upkeepText += `${resourceIcons[resource]} ${resource.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${player.upkeep[resource]}/turn, `;
+      upkeepText += `${resource}: ${player.upkeep[resource]}/turn, `;
     }
   }
   
-  if (hasUpkeep) {
-    upkeepList.innerHTML = upkeepText.slice(0, -2); // Remove trailing comma and space
-  } else {
-    upkeepList.innerHTML = 'None';
-  }
+  upkeepList.innerHTML = hasUpkeep ? upkeepText.slice(0, -2) : 'None';
 }
 
-// Update building buttons display with resource costs
-export function updateBuildingButtons(gameState, startBuilding) {
-  const buildingButtons = document.querySelector('.building-buttons');
-  if (!buildingButtons) {
-    console.error("Building buttons container not found");
-    return;
-  }
-
-  try {
-    // Show loading state
-    buildingButtons.innerHTML = `
-      <div id="building-menu-loading" class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>Loading building options...</p>
-      </div>`;
-
-    // Create building menu tabs
-    createBuildingMenuTabs(gameState, startBuilding);
-  } catch (error) {
-    console.error("Error creating building menu:", error);
-    buildingButtons.innerHTML = `
-      <div class="error-state">
-        <p>Error loading building menu. Please try refreshing the page.</p>
-        <p class="error-details">${error.message}</p>
-      </div>`;
-  }
-}
-
-// Update unit buttons with available units to produce
-export function updateUnitButtons(gameState, createUnit) {
-  const unitButtonsContainer = document.getElementById('unitButtons');
-  unitButtonsContainer.innerHTML = '';
-  
-  const player = gameState.players[gameState.currentPlayer - 1];
-  
-  // Group units by age
-  const unitsByAge = {};
-  
-  player.unlockedUnits.forEach(unitType => {
-    const unit = unitTypes[unitType];
-    if (unit) {
-      const unitAge = unit.age;
-      if (!unitsByAge[unitAge]) {
-        unitsByAge[unitAge] = [];
-      }
-      unitsByAge[unitAge].push(unitType);
-    }
-  });
-  
-  // Sort ages
-  const sortedAges = Object.keys(unitsByAge).sort((a, b) => a - b);
-  
-  // Create unit category for each age
-  sortedAges.forEach(age => {
-    const ageName = gameState.ages[age];
-    
-    const categoryDiv = document.createElement('div');
-    categoryDiv.className = 'unit-category';
-    categoryDiv.innerHTML = `<h4>${ageName} Units</h4>`;
-    
-    unitsByAge[age].forEach(unitType => {
-      const unit = unitTypes[unitType];
-      const costText = formatResourceCost(unit.cost);
-      
-      const button = document.createElement('button');
-      button.textContent = `${unitType.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} (${costText})`;
-      button.onclick = () => createUnit(unitType);
-      
-      // Check if player can afford it
-      let canAfford = true;
-      let missingResources = [];
-      
-      for (const resource in unit.cost) {
-        const required = unit.cost[resource];
-        const available = player.resources[resource] || 0;
-        
-        if (available < required) {
-          canAfford = false;
-          missingResources.push(`${resource.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: ${available}/${required}`);
-        }
-      }
-      
-      button.disabled = !canAfford;
-      
-      // Add tooltip for disabled buttons
-      if (!canAfford) {
-        button.title = `Insufficient resources:\n${missingResources.join('\n')}`;
-      } else {
-        const unitInfo = unitTypes[unitType];
-        let tooltipText = `${unitType.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`;
-        
-        if (unitInfo.description) {
-          tooltipText += `\n${unitInfo.description}`;
-        }
-        
-        if (unitInfo.attack) {
-          tooltipText += `\nAttack: ${unitInfo.attack}`;
-        }
-        
-        if (unitInfo.defense) {
-          tooltipText += `\nDefense: ${unitInfo.defense}`;
-        }
-        
-        if (unitInfo.move) {
-          tooltipText += `\nMovement: ${unitInfo.move}`;
-        }
-        
-        if (unitInfo.abilities && unitInfo.abilities.length > 0) {
-          tooltipText += `\nAbilities: ${unitInfo.abilities.join(', ')}`;
-        }
-        
-        button.title = tooltipText;
-      }
-      
-      categoryDiv.appendChild(button);
-    });
-    
-    unitButtonsContainer.appendChild(categoryDiv);
-  });
-}
-
-// Update research buttons
-export function updateResearchButtons(gameState, startResearch) {
-  const researchButtons = document.getElementById('researchButtons');
-  const player = gameState.players[gameState.currentPlayer - 1];
-  const currentAge = player.age;
-  
-  researchButtons.innerHTML = '';
-  
-  // Get technologies for current age
-  const ageTechnologies = technologies[currentAge];
-  if (!ageTechnologies) return;
-  
-  for (const techName in ageTechnologies) {
-    const tech = ageTechnologies[techName];
-    
-    // Check if already researched
-    if (player.technologies.includes(techName)) continue;
-    
-    // Check prerequisites
-    let prerequisitesMet = true;
-    for (const prereq of tech.prerequisites) {
-      if (!player.technologies.includes(prereq)) {
-        prerequisitesMet = false;
-        break;
-      }
-    }
-    
-    // Create button
-    const button = document.createElement('button');
-    button.textContent = `${techName} (${tech.cost} Tech Points)`;
-    button.disabled = !prerequisitesMet || player.currentResearch;
-    button.title = tech.description;
-    
-    // If already researching this, show progress
-    if (player.currentResearch === techName) {
-      button.textContent += ` - Researching (${Math.floor(player.researchProgress)}%)`;
-      button.disabled = true;
-    }
-    
-    button.onclick = () => startResearch(techName);
-    researchButtons.appendChild(button);
-  }
-  
-  // Update research progress bar
-  const progressBar = document.getElementById('researchProgressBar');
-  const progressLabel = document.getElementById('researchProgressLabel');
-  
-  if (player.currentResearch) {
-    progressBar.style.width = `${player.researchProgress}%`;
-    progressLabel.textContent = `Researching ${player.currentResearch}: ${Math.floor(player.researchProgress)}%`;
-  } else {
-    progressBar.style.width = '0%';
-    progressLabel.textContent = 'No research in progress';
-  }
-}
-
-// Update the building details sidebar
-function updateBuildingDetailsSidebar(sidebar, buildingType, building, player) {
-  // Clear the sidebar
-  sidebar.innerHTML = '';
-  
-  // Create header with building icon and name
-  const header = document.createElement('h3');
-  header.className = 'details-header';
-  
-  const iconDiv = document.createElement('div');
-  iconDiv.className = 'building-icon';
-  iconDiv.innerHTML = `<span class="icon-placeholder">${buildingType.charAt(0).toUpperCase()}</span>`;
-  
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = buildingType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  
-  header.appendChild(iconDiv);
-  header.appendChild(nameSpan);
-  sidebar.appendChild(header);
-  
-  // Add building description
-  if (building.description) {
-    const description = document.createElement('div');
-    description.className = 'details-description';
-    description.textContent = building.description;
-    sidebar.appendChild(description);
-  }
-  
-  // Add stats section
-  const statsDiv = document.createElement('div');
-  statsDiv.className = 'details-stats';
-  
-  // Age
-  addStatItem(statsDiv, 'Age', building.age || 'Stone Age');
-  
-  // Category
-  if (building.category) {
-    addStatItem(statsDiv, 'Type', buildingCategories[building.category] || building.category);
-  }
-  
-  // Production
-  if (building.production) {
-    for (const resource in building.production) {
-      const resourceIcon = resourceIcons[resource] || '📦';
-      const resourceName = resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-      addStatItem(statsDiv, `${resourceIcon} ${resourceName} Production`, building.production[resource]);
-    }
-  }
-  
-  // Defense
-  if (building.defense) {
-    addStatItem(statsDiv, 'Defense', building.defense);
-  }
-  
-  // Vision
-  if (building.vision) {
-    addStatItem(statsDiv, 'Vision Range', `${building.vision} tiles`);
-  }
-  
-  // Build time
-  if (building.buildTime) {
-    addStatItem(statsDiv, 'Build Time', `${building.buildTime} ${building.buildTime === 1 ? 'turn' : 'turns'}`);
-  }
-  
-  // Placement requirements
-  if (building.terrainRequirement || building.requiresCity) {
-    let requirementText = '';
-    
-    if (building.terrainRequirement) {
-      requirementText += `${building.terrainRequirement.join(' or ')} terrain`;
-    }
-    
-    if (building.requiresCity) {
-      if (requirementText) requirementText += ', ';
-      requirementText += 'must be within city borders';
-    }
-    
-    addStatItem(statsDiv, 'Placement', requirementText);
-  }
-  
-  // Resource requirements
-  const costItems = [];
-  for (const resource in building.cost) {
-    const required = building.cost[resource];
-    const available = player.resources[resource] || 0;
-    const resourceIcon = resourceIcons[resource] || '📦';
-    const resourceName = resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-    
-    costItems.push({
-      label: `${resourceIcon} ${resourceName}`,
-      value: `${available}/${required}`,
-      isAffordable: available >= required
-    });
-  }
-  
-  if (costItems.length > 0) {
-    const costsHeader = document.createElement('div');
-    costsHeader.className = 'stat-section-title';
-    costsHeader.textContent = 'Resource Requirements';
-    statsDiv.appendChild(costsHeader);
-    
-    costItems.forEach(item => {
-      const statItem = document.createElement('div');
-      statItem.className = 'stat-item';
-      
-      const label = document.createElement('div');
-      label.className = 'stat-label';
-      label.textContent = item.label;
-      
-      const value = document.createElement('div');
-      value.className = `stat-value ${item.isAffordable ? 'affordable' : 'unaffordable'}`;
-      value.textContent = item.value;
-      
-      statItem.appendChild(label);
-      statItem.appendChild(value);
-      statsDiv.appendChild(statItem);
-    });
-  }
-  
-  sidebar.appendChild(statsDiv);
-  
-  // Add placement preview section if applicable
-  if (building.terrainRequirement) {
-    const previewSection = document.createElement('div');
-    previewSection.className = 'placement-preview';
-    
-    const previewTitle = document.createElement('div');
-    previewTitle.className = 'preview-title';
-    previewTitle.textContent = 'Valid Placement';
-    
-    const previewTypes = document.createElement('div');
-    previewTypes.className = 'preview-types';
-    
-    building.terrainRequirement.forEach(terrain => {
-      const terrainType = document.createElement('div');
-      terrainType.className = 'preview-tile-type valid';
-      terrainType.textContent = terrain;
-      previewTypes.appendChild(terrainType);
-    });
-    
-    previewSection.appendChild(previewTitle);
-    previewSection.appendChild(previewTypes);
-    sidebar.appendChild(previewSection);
-  }
-}
-
-// Helper to add a stat item to the stats div
-function addStatItem(statsDiv, label, value) {
-  const statItem = document.createElement('div');
-  statItem.className = 'stat-item';
-  
-  const statLabel = document.createElement('div');
-  statLabel.className = 'stat-label';
-  statLabel.textContent = label;
-  
-  const statValue = document.createElement('div');
-  statValue.className = 'stat-value';
-  statValue.textContent = value;
-  
-  statItem.appendChild(statLabel);
-  statItem.appendChild(statValue);
-  statsDiv.appendChild(statItem);
-}
-
-// Update the age progress bar
+// Age progress
 export function updateAgeProgressDisplay(gameState) {
-  const player = gameState.players[gameState.currentPlayer - 1];
   const progressBar = document.getElementById('ageProgressBar');
   const progressLabel = document.getElementById('ageProgressLabel');
   
+  if (!progressBar || !progressLabel) return;
+  
+  const player = gameState.players[gameState.currentPlayer - 1];
+  
   progressBar.style.width = `${player.ageProgress}%`;
   progressLabel.textContent = `Age Progress: ${Math.floor(player.ageProgress)}%`;
-  
-  // Update advance age button state
-  const advanceAgeBtn = document.getElementById('advanceAgeBtn');
-  advanceAgeBtn.disabled = player.ageProgress < 100 || gameState.ages.indexOf(player.age) >= gameState.ages.length - 1;
 }
 
-// Helper function to format resource cost for UI display
-export function formatResourceCost(cost) {
-  let costText = '';
-  for (const resource in cost) {
-    costText += `${cost[resource]} ${resource.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}, `;
-  }
-  return costText.slice(0, -2); // Remove trailing comma and space
-}
-
-// Show a notification message with optional type
+// Notifications
 export function showNotification(message, type = 'info') {
   const notification = document.getElementById('notification');
+  if (!notification) return;
+  
   notification.textContent = message;
-  
-  // Remove any existing type classes
-  notification.classList.remove('notification-info', 'notification-success', 'notification-warning', 'notification-error');
-  
-  // Add the appropriate type class
-  notification.classList.add('show', `notification-${type}`);
+  notification.className = `notification notification-${type} show`;
   
   setTimeout(() => {
-    notification.classList.remove('show', `notification-${type}`);
+    notification.className = 'notification';
   }, 3500);
 }
 
-// Get tooltip content for a unit, including movement points
+// Unit tooltip content
 export function getUnitTooltipContent(unit) {
-  let content = `Unit: ${unit.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`;
+  if (!unit) return '';
+  
+  let content = `Unit: ${unit.type}`;
   content += `<br>Owner: Player ${unit.owner}`;
   
   if (unit.health) {
     content += `<br>Health: ${unit.health}%`;
   }
   
-  // Add movement points if available
-  if (unit.remainingMP !== undefined) {
-    const unitTypeInfo = unitTypes[unit.type];
-    const maxMP = unitTypeInfo ? unitTypeInfo.move : 0;
-    content += `<br>MP: ${unit.remainingMP}/${maxMP}`;
-  }
-  
-  // Add cargo info for transports
-  if (unit.cargo && unit.cargo.length > 0) {
-    const unitTypeInfo = unitTypes[unit.type];
-    const capacity = unitTypeInfo.capacity || 0;
-    content += `<br>Cargo: ${unit.cargo.length}/${capacity}`;
-    
-    // List cargo contents
-    unit.cargo.forEach(cargoUnit => {
-      content += `<br> - ${cargoUnit.type}`;
-    });
-  }
-  
-  // Add special abilities
-  const unitTypeInfo = unitTypes[unit.type];
-  if (unitTypeInfo && unitTypeInfo.abilities && unitTypeInfo.abilities.length > 0) {
-    content += `<br>Abilities: ${unitTypeInfo.abilities.join(', ')}`;
-  }
-  
   return content;
 }
 
-// Cache for rendered tiles
-const tileCache = new Map();
-
-// Cache key generator for tiles
-function getTileCacheKey(tile, x, y) {
-  return `${x},${y},${tile.type},${tile.discovered},${tile.unit?.type},${tile.building?.type},${tile.resourceAmount}`;
+// Loading Manager
+export class LoadingManager {
+  constructor() {
+    this.overlay = document.getElementById('loading');
+    if (!this.overlay) {
+      this.overlay = document.createElement('div');
+      this.overlay.id = 'loading';
+      document.body.appendChild(this.overlay);
+    }
+    this.overlay.style.display = 'none';
+  }
+  
+  show() {
+    this.overlay.style.display = 'block';
+  }
+  
+  hide() {
+    this.overlay.style.display = 'none';
+  }
+  
+  updateProgress(progress, message = '') {
+    this.overlay.textContent = message || 'Loading...';
+  }
 }
 
-// Clear cache when needed (e.g., on major state changes)
-export function clearTileCache() {
-  tileCache.clear();
+// Drawing functions
+function drawTerrainFeatures(tile, ctx, x, y) {
+  switch(tile.type) {
+    case 'forest':
+      for (let i = 0; i < 3; i++) {
+        const offsetX = (i - 1) * (TILE_SIZE / 4);
+        const offsetY = (i % 2 === 0 ? -1 : 1) * (TILE_SIZE / 8);
+        
+        ctx.fillStyle = '#1a5f1a';
+        ctx.beginPath();
+        ctx.moveTo(x + offsetX, y + offsetY - 10);
+        ctx.lineTo(x + offsetX - 5, y + offsetY + 5);
+        ctx.lineTo(x + offsetX + 5, y + offsetY + 5);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x + offsetX - 2, y + offsetY + 5, 4, 5);
+      }
+      break;
+    case 'mountain':
+      ctx.fillStyle = '#aaaaaa';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10);
+      ctx.lineTo(x - 10, y + 5);
+      ctx.lineTo(x + 10, y + 5);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10);
+      ctx.lineTo(x - 4, y - 6);
+      ctx.lineTo(x + 4, y - 6);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'hills':
+      ctx.fillStyle = '#b97a57';
+      ctx.beginPath();
+      ctx.moveTo(x - 10, y + 5);
+      ctx.quadraticCurveTo(x - 5, y - 8, x, y);
+      ctx.quadraticCurveTo(x + 5, y - 8, x + 10, y + 5);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'desert':
+      ctx.strokeStyle = '#d2b773';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x - 10, y - 5);
+      ctx.quadraticCurveTo(x - 5, y - 10, x, y - 5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y + 5);
+      ctx.quadraticCurveTo(x, y, x + 8, y + 5);
+      ctx.stroke();
+      break;
+  }
 }
 
-// Render the game map with hexagonal tiles
+function drawBuilding(building, ctx, x, y) {
+  const size = TILE_SIZE * 0.7;
+  
+  let color = '#f55';
+  switch(building.type) {
+    case 'farm': color = '#8fc31f'; break;
+    case 'mine': case 'iron_mine': case 'gold_mine': color = '#7f7f7f'; break;
+    case 'logging_camp': color = '#8d6e63'; break;
+    case 'house': case 'cabin': color = '#9c6644'; break;
+    case 'barracks': color = '#f44336'; break;
+    case 'market': color = '#9c27b0'; break;
+    case 'city': case 'capital': color = '#ffeb3b'; break;
+  }
+  
+  ctx.fillStyle = color;
+  ctx.fillRect(x - size/2, y - size/2, size, size);
+  
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - size/2, y - size/2, size, size);
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(building.type.substring(0, 3).toUpperCase(), x, y);
+}
+
+function drawBuildingInProgress(building, ctx, x, y) {
+  const size = TILE_SIZE * 0.6;
+  
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = '#555';
+  ctx.strokeRect(x - size/2, y - size/2, size, size);
+  ctx.setLineDash([]);
+  
+  const progress = building.progress || 0;
+  const barWidth = size * 0.8;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fillRect(x - barWidth/2, y + 8, barWidth, 3);
+  
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(x - barWidth/2, y + 8, barWidth * (progress / 100), 3);
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px Arial';
+  ctx.fillText(building.type.substring(0, 3), x, y);
+}
+
+function drawUnit(unit, ctx, x, y, currentPlayer) {
+  const unitSize = TILE_SIZE * 0.6;
+  const isCurrentPlayerUnit = unit.owner === currentPlayer;
+  
+  const playerColors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+  const playerColor = playerColors[(unit.owner - 1) % playerColors.length];
+  
+  ctx.beginPath();
+  ctx.arc(x, y, unitSize/2, 0, Math.PI * 2);
+  ctx.fillStyle = playerColor;
+  ctx.fill();
+  
+  ctx.strokeStyle = isCurrentPlayerUnit ? '#fff' : '#000';
+  ctx.lineWidth = isCurrentPlayerUnit ? 2 : 1;
+  ctx.stroke();
+  
+  let unitSymbol = unit.type.charAt(0).toUpperCase();
+  switch(unit.type.toLowerCase()) {
+    case 'warrior': unitSymbol = '⚔️'; break;
+    case 'settler': unitSymbol = '🏠'; break;
+    case 'archer': unitSymbol = '🏹'; break;
+    case 'knight': unitSymbol = '🐎'; break;
+    case 'worker': unitSymbol = '🔨'; break;
+  }
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(unitSymbol, x, y);
+  
+  if (unit.health && unit.health < 100) {
+    const barWidth = unitSize * 0.8;
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x - barWidth/2, y + unitSize/2 + 2, barWidth, 3);
+    
+    const healthPercent = unit.health / 100;
+    const color = healthPercent > 0.6 ? '#2ecc71' : healthPercent > 0.3 ? '#f39c12' : '#e74c3c';
+    ctx.fillStyle = color;
+    ctx.fillRect(x - barWidth/2, y + unitSize/2 + 2, barWidth * healthPercent, 3);
+  }
+}
+
+function drawTile(tile, ctx, x, y, gameState, fogOfWarEnabled, waterPattern, isHovered = false) {
+  const playerIndex = gameState.currentPlayer - 1;
+  const isDiscovered = tile.discovered && tile.discovered[playerIndex];
+  
+  if (fogOfWarEnabled && !isDiscovered) {
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+    return;
+  }
+  
+  // Fill tile background
+  const terrainInfo = terrainTypes[tile.type] || terrainTypes.plains;
+  ctx.fillStyle = tile.type === 'water' ? waterPattern : terrainInfo.color;
+  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+  
+  // Apply normal border
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+  
+  // Apply highlight border if hovered
+  if (isHovered) {
+    // Determine highlight color based on resource
+    let highlightColor = '#ffffff'; // Default white glow
+    
+    if (tile.resourceType) {
+      // Resource-specific colors
+      switch(tile.resourceType) {
+        case 'food': highlightColor = '#4CAF50'; break; // Green for food
+        case 'wood': highlightColor = '#4CAF50'; break; // Green for wood
+        case 'stone': highlightColor = '#9E9E9E'; break; // Gray for stone
+        case 'iron': highlightColor = '#78909C'; break; // Blue-gray for iron
+        case 'gold': highlightColor = '#FFC107'; break; // Amber for gold
+        case 'fish': highlightColor = '#2196F3'; break; // Blue for fish/water
+      }
+    }
+    
+    // Draw glow effect
+    ctx.strokeStyle = highlightColor;
+    ctx.lineWidth = HIGHLIGHT_BORDER_WIDTH;
+    ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+  }
+  
+  const centerX = x + TILE_SIZE / 2;
+  const centerY = y + TILE_SIZE / 2;
+  
+  drawTerrainFeatures(tile, ctx, centerX, centerY);
+  
+  if (tile.resourceType && resourceIcons[tile.resourceType]) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - TILE_SIZE * 0.25, 10, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fill();
+    
+    ctx.fillStyle = '#000';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(resourceIcons[tile.resourceType], centerX, centerY - TILE_SIZE * 0.25);
+  }
+  
+  if (tile.building) {
+    drawBuilding(tile.building, ctx, centerX, centerY);
+  } else if (tile.buildingInProgress) {
+    drawBuildingInProgress(tile.buildingInProgress, ctx, centerX, centerY);
+  }
+  
+  if (tile.unit) {
+    drawUnit(tile.unit, ctx, centerX, centerY, gameState.currentPlayer);
+  }
+}
+
+function drawMinimapTile(tile, minimapCtx, tileSize, gameState, fogOfWarEnabled) {
+  const playerIndex = gameState.currentPlayer - 1;
+  const isDiscovered = tile.discovered && tile.discovered[playerIndex];
+  
+  if (fogOfWarEnabled && !isDiscovered) {
+    minimapCtx.fillStyle = '#333';
+  } else {
+    const terrainInfo = terrainTypes[tile.type] || terrainTypes.plains;
+    minimapCtx.fillStyle = terrainInfo.color;
+  }
+  
+  minimapCtx.fillRect(tile.x * tileSize, tile.y * tileSize, tileSize, tileSize);
+  
+  if (tile.unit && (!fogOfWarEnabled || isDiscovered)) {
+    const playerColors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+    minimapCtx.fillStyle = playerColors[(tile.unit.owner - 1) % playerColors.length];
+    minimapCtx.fillRect(tile.x * tileSize, tile.y * tileSize, tileSize, tileSize);
+  }
+}
+
+function drawMinimapViewport(minimap, minimapCtx, canvas, cameraX, cameraY, tileSize) {
+  minimapCtx.strokeStyle = '#fff';
+  minimapCtx.lineWidth = 1;
+  
+  const viewX = cameraX / TILE_SIZE * tileSize;
+  const viewY = cameraY / TILE_SIZE * tileSize;
+  const viewW = canvas.width / TILE_SIZE * tileSize;
+  const viewH = canvas.height / TILE_SIZE * tileSize;
+  
+  minimapCtx.strokeRect(viewX, viewY, viewW, viewH);
+}
+
+function drawSelectedUnit(selectedUnit, ctx, offsetX, offsetY) {
+  const tileX = selectedUnit.x * TILE_SIZE - offsetX;
+  const tileY = selectedUnit.y * TILE_SIZE - offsetY;
+  
+  ctx.strokeStyle = '#ff0';
+  ctx.lineWidth = 2;
+  
+  const pulse = Math.sin(performance.now() / 200) * 3 + 1;
+  ctx.strokeRect(
+    tileX - pulse, 
+    tileY - pulse, 
+    TILE_SIZE + pulse * 2, 
+    TILE_SIZE + pulse * 2
+  );
+}
+
+function drawMovementRange(validMovementLocations, ctx, offsetX, offsetY) {
+  ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+  
+  for (const loc of validMovementLocations) {
+    const tileX = loc.x * TILE_SIZE - offsetX;
+    const tileY = loc.y * TILE_SIZE - offsetY;
+    
+    if (tileX < -TILE_SIZE || tileX > ctx.canvas.width + TILE_SIZE ||
+        tileY < -TILE_SIZE || tileY > ctx.canvas.height + TILE_SIZE) {
+      continue;
+    }
+    
+    ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+  }
+}
+
+// For tile click animation
+let clickAnimationTile = null;
+let clickAnimationStart = 0;
+const CLICK_ANIMATION_DURATION = 300; // ms
+
+// For tile hover state
+let hoveredTileCoords = null;
+
+// Trigger click animation on a tile
+export function animateTileClick(tileX, tileY) {
+  clickAnimationTile = { x: tileX, y: tileY };
+  clickAnimationStart = performance.now();
+}
+
+// Set the currently hovered tile
+export function setHoveredTile(tileX, tileY) {
+  hoveredTileCoords = tileX !== null ? { x: tileX, y: tileY } : null;
+}
+
+// Main render function
 export function render(gameState, canvasData) {
+  if (!gameState || !gameState.map || !canvasData || !canvasData.ctx) return;
+  
   const { 
     canvas, ctx, minimap, minimapCtx, 
-    tileSize, minimapTileSize, 
-    fogOfWarEnabled, selectedUnit, 
-    mouseX, mouseY, cameraOffsetX, cameraOffsetY 
+    fogOfWarEnabled, selectedUnit, cameraOffsetX, cameraOffsetY 
   } = canvasData;
-  
-  // Calculate hex size based on canvas dimensions and map radius
-  const mapRadius = gameState.mapRadius || Math.floor(gameState.mapSize / 2);
-  const hexSize = Math.min(
-    canvas.width / (mapRadius * 3.5), // Ensure entire map fits
-    canvas.height / (mapRadius * 3.5),
-    tileSize // Use configured tile size as a maximum
-  );
-  
-  // Add a visual center offset to position the map in the middle of the screen
-  const centerOffsetX = canvas.width / 2;
-  const centerOffsetY = canvas.height / 2;
   
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+  if (minimapCtx) minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+  
+  // Calculate FPS
+  renderedFrameCount++;
+  const now = performance.now();
+  if (now - lastFpsUpdateTime > 1000) {
+    fps = Math.round((renderedFrameCount * 1000) / (now - lastFpsUpdateTime));
+    lastFpsUpdateTime = now;
+    renderedFrameCount = 0;
+  }
+  
+  // Draw FPS counter
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(10, 10, 60, 24);
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px Arial';
+  ctx.fillText(`FPS: ${fps}`, 15, 26);
   
   const mapSize = gameState.map.length;
+  const waterPattern = createWaterPattern(ctx);
   
-  // Render map grid as hexagons
+  // Screen size warnings
+  const optimalSize = calculateOptimalMapSize(canvas);
+  if (mapSize > optimalSize && !gameState.sizeWarningShown) {
+    showNotification(`Map size (${mapSize}x${mapSize}) may be too large for your screen. Recommended size: ${optimalSize}x${optimalSize}`, 'warning');
+    gameState.sizeWarningShown = true;
+  }
+  
+  // Center small maps
+  let offsetX = cameraOffsetX;
+  let offsetY = cameraOffsetY;
+  
+  if (mapSize * TILE_SIZE < canvas.width) {
+    offsetX = -(canvas.width - mapSize * TILE_SIZE) / 2;
+  }
+  
+  if (mapSize * TILE_SIZE < canvas.height) {
+    offsetY = -(canvas.height - mapSize * TILE_SIZE) / 2;
+  }
+  
+  // Minimap tile size calculation
+  const minimapTileSize = minimap ? Math.max(1, minimap.width / mapSize) : 1;
+  
+  // Draw all tiles
   for (let y = 0; y < mapSize; y++) {
     for (let x = 0; x < mapSize; x++) {
       const tile = gameState.map[y][x];
+      if (!tile) continue;
       
-      // Get the tile's coordinates (either axial or fallback to x,y)
-      const q = tile.q !== undefined ? tile.q : x;
-      const r = tile.r !== undefined ? tile.r : y;
+      // Set coordinates
+      tile.x = x;
+      tile.y = y;
       
-      // Get pixel coordinates for the hex center
-      let pixelX, pixelY;
-      if (tile.pixelX !== undefined && tile.pixelY !== undefined) {
-        pixelX = tile.pixelX;
-        pixelY = tile.pixelY;
-      } else {
-        // Calculate pixel coordinates from axial coordinates
-        const pixelCoords = axialToPixel(q, r, hexSize);
-        pixelX = pixelCoords.x;
-        pixelY = pixelCoords.y;
-      }
+      // Calculate screen position
+      const screenX = x * TILE_SIZE - offsetX;
+      const screenY = y * TILE_SIZE - offsetY;
       
-      // Adjust for camera offset to get screen coordinates
-      const screenX = pixelX - cameraOffsetX;
-      const screenY = pixelY - cameraOffsetY;
-      
-      // The buffer size needs to be larger for hexagons
-      const bufferSize = hexSize * 2;
-      
-      // Skip rendering if outside of view
-      if (screenX < -bufferSize || screenY < -bufferSize || 
-          screenX > canvas.width + bufferSize || screenY > canvas.height + bufferSize) {
-        // Still draw on minimap
-        const minimapScale = minimap.width / (mapSize * Math.sqrt(3) * hexSize);
-        const minimapX = pixelX * minimapScale;
-        const minimapY = pixelY * minimapScale;
-        const minimapHexSize = minimapTileSize / 2;
-        
-        if (tile.discovered[gameState.currentPlayer - 1]) {
-          // Get color based on terrain
-          const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
-          minimapCtx.fillStyle = terrainInfo.color;
-          
-          // Draw a simple circle on minimap for better visibility
-          minimapCtx.beginPath();
-          minimapCtx.arc(minimapX, minimapY, minimapHexSize / 2, 0, Math.PI * 2);
-          minimapCtx.fill();
-        } else if (fogOfWarEnabled) {
-          // Draw terrain but overlay with semi-transparent fog on minimap
-          const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
-          minimapCtx.fillStyle = terrainInfo.color;
-          minimapCtx.beginPath();
-          minimapCtx.arc(minimapX, minimapY, minimapHexSize / 2, 0, Math.PI * 2);
-          minimapCtx.fill();
-          
-          // Apply fog of war overlay on minimap
-          minimapCtx.fillStyle = 'rgba(200, 200, 200, 0.7)';
-          minimapCtx.beginPath();
-          minimapCtx.arc(minimapX, minimapY, minimapHexSize / 2, 0, Math.PI * 2);
-          minimapCtx.fill();
+      // Skip off-screen tiles
+      if (screenX < -TILE_SIZE || screenX > canvas.width ||
+          screenY < -TILE_SIZE || screenY > canvas.height) {
+        // Still render on minimap
+        if (minimapCtx) {
+          drawMinimapTile(tile, minimapCtx, minimapTileSize, gameState, fogOfWarEnabled);
         }
-        
         continue;
       }
       
-      // Draw main map tiles as hexagons
-      if (tile.discovered[gameState.currentPlayer - 1]) {
-        const cacheKey = getTileCacheKey(tile, x, y);
-        let cachedTile = tileCache.get(cacheKey);
+      // Check if this tile is being hovered
+      const isHovered = hoveredTileCoords && 
+                       hoveredTileCoords.x === x && 
+                       hoveredTileCoords.y === y;
+      
+      // Draw tile on main canvas with hover state
+      drawTile(tile, ctx, screenX, screenY, gameState, fogOfWarEnabled, waterPattern, isHovered);
+      
+      // Draw click animation if active
+      if (clickAnimationTile && 
+          clickAnimationTile.x === x && 
+          clickAnimationTile.y === y) {
         
-        if (!cachedTile) {
-          // Create an offscreen canvas for caching
-          const offscreen = document.createElement('canvas');
-          offscreen.width = hexSize * 2;
-          offscreen.height = hexSize * 2;
-          const offCtx = offscreen.getContext('2d');
+        const elapsed = now - clickAnimationStart;
+        if (elapsed < CLICK_ANIMATION_DURATION) {
+          // Draw pulse animation
+          const progress = elapsed / CLICK_ANIMATION_DURATION;
+          const scale = 1 + progress * 0.2; // Grow to 120% of original size
+          const alpha = 1 - progress; // Fade out
           
-          // Render tile to offscreen canvas
-          drawHexagonalTile(offCtx, hexSize, hexSize, hexSize, tile, gameState);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.translate(screenX + TILE_SIZE / 2, screenY + TILE_SIZE / 2);
+          ctx.scale(scale, scale);
+          ctx.translate(-(screenX + TILE_SIZE / 2), -(screenY + TILE_SIZE / 2));
           
-          // Store in cache
-          tileCache.set(cacheKey, offscreen);
-          cachedTile = offscreen;
-        }
-        
-        // Draw cached tile
-        ctx.drawImage(cachedTile, screenX - hexSize, screenY - hexSize);
-      } else if (fogOfWarEnabled) {
-        // Draw terrain but overlay with semi-transparent fog
-        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
-        ctx.fillStyle = terrainInfo.color;
-        drawHexagon(ctx, screenX, screenY, hexSize, terrainInfo.color);
-        
-        // Draw grid lines
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 0.5;
-        drawHexagonOutline(ctx, screenX, screenY, hexSize);
-        
-        // Apply semi-transparent fog overlay
-        ctx.fillStyle = 'rgba(200, 200, 200, 0.7)';
-        drawHexagon(ctx, screenX, screenY, hexSize, 'rgba(200, 200, 200, 0.7)');
-        
-        // Highlight fogged tile under mouse to indicate it can be clicked
-        const mousePixelX = mouseX + cameraOffsetX;
-        const mousePixelY = mouseY + cameraOffsetY;
-        const mouseHexCoords = pixelToAxial(mousePixelX, mousePixelY, hexSize);
-        
-        if (mouseHexCoords.q === q && mouseHexCoords.r === r) {
-          ctx.strokeStyle = '#ffff00';
-          ctx.lineWidth = 2;
-          drawHexagonOutline(ctx, screenX, screenY, hexSize * 0.9);
-        }
-        
-        // Show unit movement highlight if in move mode - for fogged areas
-        if (gameState.unitActionMode === 'move' && gameState.validMovementLocations) {
-          const validLocation = gameState.validMovementLocations.find(loc => loc.x === x && loc.y === y);
-          if (validLocation) {
-            ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
-            drawHexagon(ctx, screenX, screenY, hexSize * 0.95, 'rgba(0, 150, 255, 0.3)');
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 10px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(validLocation.cost, screenX, screenY);
-            
-            // Add "unexplored" text for fogged tiles
-            ctx.font = '8px Arial';
-            ctx.fillText('unexplored', screenX, screenY + 10);
-            ctx.textAlign = 'start';
-          }
+          // Draw a light flash effect
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+          
+          ctx.restore();
+        } else {
+          // Animation completed
+          clickAnimationTile = null;
         }
       }
       
       // Draw on minimap
-      const minimapX = x * minimapTileSize;
-      const minimapY = y * minimapTileSize;
-      
-      if (tile.discovered[gameState.currentPlayer - 1]) {
-        // Get color based on terrain
-        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
-        minimapCtx.fillStyle = terrainInfo.color;
-        minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
-        
-        // Show units on minimap
-        if (tile.unit) {
-          const owner = gameState.players[tile.unit.owner - 1];
-          minimapCtx.fillStyle = owner.color;
-          minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
-        }
-        
-        // Show buildings on minimap
-        if (tile.building) {
-          const owner = gameState.players[tile.building.owner - 1];
-          minimapCtx.fillStyle = owner.color;
-          minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
-        }
-      } else {
-        // Draw terrain but with lighter color on minimap for undiscovered tiles
-        const terrainInfo = terrainTypes[tile.type] || terrainTypes.land;
-        minimapCtx.fillStyle = terrainInfo.color;
-        minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
-        
-        // Apply fog of war overlay on minimap
-        minimapCtx.fillStyle = 'rgba(200, 200, 200, 0.7)';
-        minimapCtx.fillRect(minimapX, minimapY, minimapTileSize, minimapTileSize);
+      if (minimapCtx) {
+        drawMinimapTile(tile, minimapCtx, minimapTileSize, gameState, fogOfWarEnabled);
       }
     }
   }
   
-  // Draw current view rectangle on minimap
-  minimapCtx.strokeStyle = '#fff';
-  minimapCtx.lineWidth = 1;
-  // Adjust minimap calculations for hex grid
-  const minimapScale = minimap.width / (mapSize * Math.sqrt(3) * hexSize);
-  const viewX = cameraOffsetX * minimapScale;
-  const viewY = cameraOffsetY * minimapScale;
-  const viewWidth = canvas.width * minimapScale;
-  const viewHeight = canvas.height * minimapScale;
-  minimapCtx.strokeRect(viewX, viewY, viewWidth, viewHeight);
-}
-
-// LoadingManager for handling loading states and progress
-export class LoadingManager {
-    constructor() {
-        this.overlay = null;
-        this.progressBar = null;
-        this.messageElement = null;
-        this.createOverlay();
-    }
-
-    createOverlay() {
-        // Create loading overlay if it doesn't exist
-        if (!this.overlay) {
-            this.overlay = document.createElement('div');
-            this.overlay.className = 'loading-overlay';
-            this.overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.8);
-                display: none;
-                justify-content: center;
-                align-items: center;
-                z-index: 9999;
-            `;
-
-            const container = document.createElement('div');
-            container.className = 'loading-container';
-            container.style.cssText = `
-                background: #fff;
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-                min-width: 300px;
-            `;
-
-            this.progressBar = document.createElement('div');
-            this.progressBar.className = 'loading-progress';
-            this.progressBar.style.cssText = `
-                width: 100%;
-                height: 20px;
-                background: #eee;
-                border-radius: 10px;
-                overflow: hidden;
-                margin: 10px 0;
-            `;
-
-            const progressFill = document.createElement('div');
-            progressFill.className = 'progress-fill';
-            progressFill.style.cssText = `
-                width: 0%;
-                height: 100%;
-                background: #4CAF50;
-                transition: width 0.3s ease-in-out;
-            `;
-            this.progressBar.appendChild(progressFill);
-
-            this.messageElement = document.createElement('div');
-            this.messageElement.className = 'loading-message';
-            this.messageElement.style.cssText = `
-                margin-top: 10px;
-                color: #333;
-                font-size: 14px;
-            `;
-
-            container.appendChild(this.progressBar);
-            container.appendChild(this.messageElement);
-            this.overlay.appendChild(container);
-            document.body.appendChild(this.overlay);
-        }
-    }
-
-    show() {
-        if (this.overlay) {
-            this.overlay.style.display = 'flex';
-        }
-    }
-
-    hide() {
-        if (this.overlay) {
-            this.overlay.style.display = 'none';
-        }
-    }
-
-    updateProgress(progress, message = '') {
-        if (this.progressBar && this.messageElement) {
-            const fill = this.progressBar.querySelector('.progress-fill');
-            if (fill) {
-                fill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-            }
-            if (message) {
-                this.messageElement.textContent = message;
-            }
-        }
-    }
-}
-
-// Update city list display
-export function updateCityList(gameState) {
-    const cityList = document.getElementById('cityList');
-    if (!cityList) return;
-
-    const currentPlayer = gameState.players[gameState.currentPlayer - 1];
-    const cities = currentPlayer.buildings.filter(b => b.type === 'city' || b.type === 'capital');
-
-    if (cities.length === 0) {
-        cityList.innerHTML = '<div class="no-cities">No cities founded yet</div>';
-        return;
-    }
-
-    cityList.innerHTML = cities.map(city => `
-        <div class="city-item">
-            <h4>${city.name}</h4>
-            <p>Population: ${city.population || 5}</p>
-            <p>Production: ${city.production || 'None'}</p>
-        </div>
-    `).join('');
-}
-
-// Update diplomacy status display
-export function updateDiplomacyStatus(gameState) {
-    const statusElement = document.getElementById('diplomacyStatus');
-    if (!statusElement) return;
-
-    const currentPlayer = gameState.players[gameState.currentPlayer - 1];
-    const status = currentPlayer.diplomacyStatus || 'Neutral';
-    
-    statusElement.textContent = status;
-}
-
-// Update building buttons by category
-export function updateBuildingButtonsByCategory(gameState, category, startBuilding) {
-    const buildingButtons = document.querySelector('.building-buttons');
-    if (!buildingButtons) return;
-
-    buildingButtons.innerHTML = '';
-    const player = gameState.players[gameState.currentPlayer - 1];
-
-    for (const [buildingType, building] of Object.entries(buildingTypes)) {
-        if (category !== 'all' && building.category !== category) continue;
-        
-        const button = document.createElement('button');
-        button.textContent = `${buildingType.replace(/_/g, ' ')} (${formatResourceCost(building.cost)})`;
-        button.onclick = () => startBuilding(buildingType);
-        
-        // Check if player can afford it
-        let canAfford = true;
-        for (const [resource, cost] of Object.entries(building.cost)) {
-            if ((player.resources[resource] || 0) < cost) {
-                canAfford = false;
-                break;
-            }
-        }
-        
-        button.disabled = !canAfford;
-        buildingButtons.appendChild(button);
-    }
+  // Draw movement range
+  if (gameState.unitActionMode === 'move' && gameState.validMovementLocations && selectedUnit) {
+    drawMovementRange(gameState.validMovementLocations, ctx, offsetX, offsetY);
+  }
+  
+  // Draw selection highlight
+  if (selectedUnit) {
+    drawSelectedUnit(selectedUnit, ctx, offsetX, offsetY);
+  }
+  
+  // Draw minimap viewport
+  if (minimapCtx && minimap) {
+    drawMinimapViewport(minimap, minimapCtx, canvas, offsetX, offsetY, minimapTileSize);
+  }
 }
